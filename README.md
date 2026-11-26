@@ -1,6 +1,18 @@
 # AI Minigame Arena
 
-Train an AI by playing with it, send it into short matches against other players’ AIs, and watch the replay to see what it learned. The first game is a block-stacking duel. This repository starts with the design and implementation plan.
+Train an AI by playing with it, send it into short matches against other players’ AIs, and watch the replay to see what it learned. The first game is a block-stacking duel. The first prototype is a local two-player terminal duel.
+
+## Run the prototype
+
+Use Node.js 24 or newer. The prototype uses Node’s built-in TypeScript support and has no packages to install.
+
+```sh
+npm test
+npm run play
+npm run play -- 42
+```
+
+Two players take turns at the same terminal. Enter a column from 1 to 9 and one of the four rotations in degrees, for example `3 90`. The column is the left edge of the rotated piece. The game shows all four rotations before each turn, with the boards and scores side by side. Enter `q` to quit. Pass a seed to replay the same piece sequence, or omit it to draw a new one.
 
 ## What makes it a game
 
@@ -21,8 +33,8 @@ Build a turn-based, side-by-side stacking duel with an integer grid. Each compet
 | --- | --- |
 | Board | 9 columns by 16 rows |
 | Match length | 12 placements per competitor, or until that competitor busts |
-| Stability | Each shape has at least half its lowest cells supported. At every horizontal cut, each connected mass above the cut must have its horizontal center of mass between its outermost support contact edges. Treat grid cells as equal mass. |
-| Bust | A player busts if a piece overflows the board, a placement makes the tower unstable, or there are no legal drops. The opponent finishes their remaining turns. |
+| Stability | Each newly placed shape has at least half its underside cells supported. An underside cell has no cell from the same shape directly below it. At every horizontal cut, each connected mass above the cut must have its horizontal center of mass between its outermost support contact edges. Treat grid cells as equal mass. |
+| Bust | A player busts if a piece overflows the board or a placement fails a stability check. The opponent finishes their remaining turns. |
 | Score | Highest stable height reached. A competitor that finishes without busting beats a competitor that busts. Equal outcomes and scores are a draw. |
 | Invalid input | Out-of-range columns and invalid orientations are rejected without advancing the turn. A geometrically valid drop may still bust. |
 
@@ -45,7 +57,7 @@ The first implementation can run one update per batch of experience. Keep the tr
 
 ## Code layout
 
-Use TypeScript for the first pass so the simulator, trainer, tests, and replay UI can share types. The proposed layout below describes code to write.
+Use TypeScript for the first pass so the simulator, trainer, tests, and replay UI can share types. The layout below includes planned modules.
 
 ```text
 src/
@@ -67,7 +79,7 @@ Keep the engine independent of the UI and of persistence. A state transition rec
 4. **Close the coaching loop.** Let a human play a private duel and demonstrate a move. Save both sources of experience, run the trainer, and show how a policy version scored the available moves before and after coaching.
 5. **Add online matches after the server decision.** Start with asynchronous head-to-head matches. Queue two players, snapshot their policies, simulate the match, and make the result and replay available to both. Add a rating for stacking after results are recorded reliably.
 
-The first coding session ends at step 1. Initialize the TypeScript project, pick a test runner, and write three fixtures before adding UI: an ordinary floor drop, a stable overhang, and a placement that causes a bust. Build a terminal demo that accepts a column and orientation, then prints the board and score.
+Step 1 uses Node’s built-in test runner. Its fixtures cover ordinary floor drops, stable overhangs, busts, and completing a duel after one player busts.
 
 ## Data to carry into online play
 
@@ -95,4 +107,4 @@ The local milestones can run on one machine with in-memory state or local files.
 
 ## Development status
 
-Design and implementation plan only. There is no game code, dependency setup, or deployment in this initial repository.
+The stacking engine and local two-player terminal duel are playable. The next milestone is reproducible bot-versus-bot matches.
