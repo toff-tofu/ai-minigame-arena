@@ -14,6 +14,17 @@ npm run play -- 42
 
 Two players take turns at the same terminal. Enter a column from 1 to 9 and one of the four rotations in degrees, for example `3 90`. The column is the left edge of the rotated piece. The game shows all four rotations before each turn, with the boards and scores side by side. Enter `q` to quit. Pass a seed to replay the same piece sequence, or omit it to draw a new one.
 
+## Run bot matches
+
+```sh
+npm run bots
+npm run bots -- 42 300 height stability
+```
+
+The arguments are the first seed, match count, and strategy for each seat. They default to `42 1 height stability`. A single match prints its moves and outcome. Batches use consecutive seeds and report wins, draws, busts, average height, and average moves.
+
+The height bot picks the tallest stable result and breaks ties by support margin. The stability bot maximizes the smallest distance of a component’s center of mass from a support edge, then favors a shorter board on ties. Both use fixed move order for any remaining ties, so the same seed and strategies produce the same move log. These baselines evaluate one move at a time with fixed heuristics. Training is a later milestone.
+
 ## What makes it a game
 
 Players are coaches as well as competitors. A good match ends with a decision the player can understand and a reason to try a different approach.
@@ -107,4 +118,4 @@ The local milestones can run on one machine with in-memory state or local files.
 
 ## Development status
 
-The stacking engine and local two-player terminal duel are playable. The next milestone is reproducible bot-versus-bot matches.
+The human terminal duel and seeded bot matches are playable. The next milestone is a visual replay.

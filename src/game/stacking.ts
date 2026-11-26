@@ -36,8 +36,10 @@ export function height(board: Board): number {
   return Math.max(0, ...Array.from(board, (cell) => Math.floor(cell / WIDTH) + 1));
 }
 
-export function isStable(board: Board): boolean {
-  for (let cut = 0; cut < height(board); cut++) {
+export function supportMargin(board: Board): number {
+  let margin = Infinity;
+  const top = height(board);
+  for (let cut = 0; cut < top; cut++) {
     const unvisited = new Set([...board].filter((cell) => cell >= cut * WIDTH));
     for (const first of unvisited) {
       const component = [first];
@@ -61,18 +63,22 @@ export function isStable(board: Board): boolean {
           }
         }
       }
-      if (centerSum < left * component.length || centerSum > right * component.length) {
-        return false;
-      }
+      const mass = component.length;
+      const edgeDistance = Math.min(centerSum - left * mass, right * mass - centerSum);
+      margin = Math.min(margin, edgeDistance / (2 * mass));
     }
   }
-  return true;
+  return margin;
+}
+
+export function isStable(board: Board): boolean {
+  return supportMargin(board) >= 0;
 }
 
 type Drop =
   | { kind: "invalid"; reason: string }
   | { kind: "bust"; reason: string }
-  | { kind: "placed"; board: Board };
+  | { kind: "placed"; board: Board; margin: number };
 
 export function drop(board: Board, piece: Piece, column: number, turns: number): Drop {
   if (!Number.isInteger(turns) || turns < 0 || turns > 3) {
@@ -103,8 +109,9 @@ export function drop(board: Board, piece: Piece, column: number, turns: number):
   for (const [x, y] of cells) {
     next.add((bottom + y) * WIDTH + column + x);
   }
-  if (!isStable(next)) {
+  const margin = supportMargin(next);
+  if (margin < 0) {
     return { kind: "bust", reason: "The tower's weight shifted beyond its support." };
   }
-  return { kind: "placed", board: next };
+  return { kind: "placed", board: next, margin };
 }
