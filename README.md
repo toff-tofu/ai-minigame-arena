@@ -28,7 +28,7 @@ Your bot scores stable drops using height and support margin. Each demonstration
 
 ### Invite someone to a battle
 
-Start the arena with `npm start`. Open it in two browser windows. Use a private window for the second player if you want separate saved weights. Click **Create battle** in the first window, copy the displayed code into the second window, and click **Join battle**. The battle starts automatically. Use **Back**, **Step**, or the timeline to review finished moves. To teach from an invite battle, rewind to just before one of your own bot’s moves. The lesson is available the next time you enter a battle or start a local match. **New match** returns you to local play.
+Start the arena with `npm start`. Open it in two browser windows. Use a private window for the second player if you want separate saved weights. Click **Create battle** in the first window, copy the displayed code into the second window, and click **Join battle**. The battle starts automatically. Use **Back**, **Step**, or the timeline to review finished moves. To teach from an invite battle, click **Coach my last move**, or use the timeline to review an earlier move by your bot. The lesson is available the next time you enter a battle or start a local match. **New match** returns you to local play.
 
 Each browser submits its current two weights when its bot enters. The server keeps those weights for the battle and computes one move at a time. Both viewers receive the same placements and can reconnect while the room is available. Anyone with the code can take the open seat or watch through the room endpoint. Rooms expire after 30 minutes and are stored in memory. Restarting the server clears them.
 

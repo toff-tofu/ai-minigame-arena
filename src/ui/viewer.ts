@@ -52,6 +52,7 @@ let weights = loadWeights();
 let matchWeights = weights;
 const columnInput = element<HTMLInputElement>("coach-column");
 const rotationInput = element<HTMLSelectElement>("coach-rotation");
+const coachLast = element<HTMLButtonElement>("coach-last");
 const teachButton = element<HTMLButtonElement>("teach");
 const feedback = element("coach-feedback");
 let teachingFrame: Frame | undefined;
@@ -151,12 +152,13 @@ function coachingState() {
 }
 
 function renderCoaching(state: ReturnType<typeof coachingState>) {
+  coachLast.disabled = !frames.some((frame) => frame.player === (online?.seat ?? 0));
   columnInput.disabled = !state;
   rotationInput.disabled = !state;
   element("coach-hint").textContent = state
     ? `Try a different drop for this ${state.piece}. Lessons apply the next time you create or join a battle or start a local match.`
     : online
-      ? "Use Back or the timeline to go to just before one of your bot’s completed turns."
+      ? "Choose Coach my last move after your bot has played, or use the timeline to pick an earlier turn."
       : "Pause and rewind to just before one of your bot’s completed turns.";
   if (teachingFrame !== state?.next) {
     teachingFrame = state?.next;
@@ -330,6 +332,25 @@ element<HTMLFormElement>("match").onsubmit = (event) => {
   frames = [{ duel: startDuel(seedInput.valueAsNumber) }];
   render();
 };
+coachLast.onclick = () => {
+  const seat = online?.seat ?? 0;
+  const index = frames.findLastIndex((frame) => frame.player === seat);
+  if (index <= 0) return;
+  pause();
+  cursor = index - 1;
+  const state = coachingState();
+  if (state) {
+    const options = placements(state.board, state.piece);
+    const alternative = options.find((move) => !sameMove(move, state.next.move!)) ?? options[0];
+    if (alternative) {
+      columnInput.value = String(alternative.column + 1);
+      rotationInput.value = String(alternative.turns);
+    }
+  }
+  feedback.textContent = "";
+  render();
+};
+
 function previewChange() {
   feedback.textContent = "";
   render();
