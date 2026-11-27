@@ -4,6 +4,11 @@ import type { Move } from "./baselines.ts";
 export type Weights = readonly [height: number, support: number];
 export const starter: Weights = [8, 1];
 
+export function isWeights(value: unknown): value is Weights {
+  return Array.isArray(value) && value.length === 2 &&
+    value.every((weight) => typeof weight === "number" && Number.isFinite(weight) && Math.abs(weight) <= 16);
+}
+
 export function features(board: Board, margin: number): Weights {
   return [height(board) / HEIGHT, margin / WIDTH];
 }

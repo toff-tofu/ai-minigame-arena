@@ -1,7 +1,7 @@
 import { randomBytes } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { searchMoves, type Move } from "../ai/baselines.ts";
-import type { Weights } from "../ai/coaching.ts";
+import { isWeights, type Weights } from "../ai/coaching.ts";
 import { playTurn, startDuel, type Duel } from "../game/duel.ts";
 import { HEIGHT, landingRow, orientation, type Piece } from "../game/stacking.ts";
 
@@ -31,10 +31,7 @@ async function readWeights(request: IncomingMessage): Promise<Weights | undefine
   }
   try {
     const value: unknown = JSON.parse(body);
-    if (Array.isArray(value) && value.length === 2 &&
-        value.every((weight) => typeof weight === "number" && Number.isFinite(weight) && Math.abs(weight) <= 16)) {
-      return [value[0], value[1]];
-    }
+    if (isWeights(value)) return value;
   } catch {
     return;
   }

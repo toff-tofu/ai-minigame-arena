@@ -60,6 +60,18 @@
       <p id="coach-preview"></p>
       <p id="coach-feedback" role="status"></p>
     </section>
+    <section id="bot-saves" aria-labelledby="bot-saves-title">
+      <h2 id="bot-saves-title">Use your bot on another device</h2>
+      <button id="save-bot" type="button">Save bot</button>
+      <form id="load-bot">
+        <label>Recovery code
+          <input id="recovery-code" type="text" required minlength="48" maxlength="48"
+                 pattern="[A-Fa-f0-9]{48}" autocomplete="off" spellcheck="false">
+        </label>
+        <button id="load-bot-button">Load bot</button>
+      </form>
+      <p id="bot-save-status" role="status">Save a copy after training. Loading a code replaces this browser’s current bot.</p>
+    </section>
   </main>
 </body>
 </html>

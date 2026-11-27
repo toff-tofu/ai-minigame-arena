@@ -12,5 +12,8 @@
     "bots": "node src/bots-cli.ts",
     "watch": "node src/ui/server.ts",
     "start": "node src/ui/server.ts"
+  },
+  "dependencies": {
+    "pg": "8.23.1"
   }
 }

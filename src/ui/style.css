@@ -33,3 +33,8 @@ select { font: inherit; }
 #join-battle { display: inline-flex; flex-wrap: wrap; margin: 6px 0; }
 #battle-code { font: inherit; width: 9rem; }
 #battle-note { color: #d2dcee; }
+
+#bot-saves { margin-top: 16px; }
+#load-bot { flex-wrap: wrap; margin-top: 10px; }
+#recovery-code { font: inherit; max-width: 100%; }
+#bot-save-status { color: #d2dcee; }

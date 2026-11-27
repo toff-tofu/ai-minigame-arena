@@ -1,3 +1,4 @@
+import { connectBotSaves, handleBotSave } from "../online/bot-saves.ts";
 import { createRooms } from "../online/rooms.ts";
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
@@ -14,15 +15,24 @@ const routes = new Map([
 ]);
 
 const rooms = createRooms();
+const saves = process.env.DATABASE_URL ? await connectBotSaves(process.env.DATABASE_URL) : undefined;
 const server = createServer(async (request, response) => {
   const path = request.url?.split("?")[0] ?? "";
   if (path.startsWith("/api/")) {
     try {
-      await rooms.handle(request, response, path);
+      if (path.startsWith("/api/bot-saves")) {
+        await handleBotSave(request, response, path, saves);
+      } else {
+        await rooms.handle(request, response, path);
+      }
     } catch (error) {
       console.error(error);
-      if (!response.headersSent) response.writeHead(500);
-      response.end();
+      if (!response.headersSent) {
+        response.writeHead(500, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+        response.end(JSON.stringify({ error: "Server request failed. Try again." }));
+      } else {
+        response.end();
+      }
     }
     return;
   }

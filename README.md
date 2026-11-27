@@ -4,7 +4,7 @@ Train an AI by playing with it, send it into short matches against other players
 
 ## Run the prototype
 
-Use Node.js 24 or newer. The prototype uses Node’s built-in TypeScript support and has no packages to install.
+Use Node.js 24 or newer. Run `npm ci` once to install dependencies. The prototype uses Node’s built-in TypeScript support.
 
 ```sh
 npm test
@@ -31,6 +31,14 @@ Your bot scores stable drops using height and support margin. Each demonstration
 Start the arena with `npm start`. Open it in two browser windows. Use a private window for the second player if you want separate saved weights. Click **Create battle** in the first window, copy the displayed code into the second window, and click **Join battle**. The battle starts automatically. Use **Back**, **Step**, or the timeline to review finished moves. To teach from an invite battle, click **Coach my last move**, or use the timeline to review an earlier move by your bot. The lesson is available the next time you enter a battle or start a local match. **New match** returns you to local play.
 
 Each browser submits its current two weights when its bot enters. The server keeps those weights for the battle and computes one move at a time. Both viewers receive the same placements and can reconnect while the room is available. Anyone with the code can take the open seat or watch through the room endpoint. Rooms expire after 30 minutes and are stored in memory. Restarting the server clears them.
+
+### Save a bot across devices
+
+With PostgreSQL connected, click **Save bot** and copy the private recovery code. Open the same arena on your other device, enter the code, and click **Load bot**. Loading replaces that browser’s current bot and takes effect the next time it enters a battle or starts a local match.
+
+A code restores a snapshot of the weights at the time of saving. Save again for a new code after further coaching. Either device can keep training its copy. Keep recovery codes private because anyone with a code can load its saved weights.
+
+On Railway, add a PostgreSQL service to the existing project. In the Node service’s **Variables**, add a reference named `DATABASE_URL` to the database service’s `DATABASE_URL` (for example, `${{Postgres.DATABASE_URL}}` if the service is named Postgres). Deploy the changes. The Node service creates the save table on startup. For local PostgreSQL, run `npm ci`, supply your connection string as the `DATABASE_URL` environment variable, and run `npm start`. With no database URL, local coaching and invite battles still work.
 
 ## Run bot matches
 
@@ -132,7 +140,7 @@ When online play arrives, trusted match execution should determine results and t
 
 ## Server decision
 
-The local milestones can run on one machine with in-memory state or local files. The invite-code prototype can run as a single Node.js service. On a host that supplies `PORT`, start it with `npm start`. It binds to `0.0.0.0` when `PORT` is set and to localhost on port 4173 by default. Use one instance while rooms live in memory. PostgreSQL and accounts are future work for keeping models and results across restarts. At that point, decide where to store accounts and replays, how to execute background matches and training, and whether the UI needs live updates. Separate skill progression by minigame so chess, block stacking, and other future games can each use the rules and learning approach that fits them.
+The local milestones can run on one machine with in-memory state or local files. The invite-code prototype can run as a single Node.js service. On a host that supplies `PORT`, start it with `npm start`. It binds to `0.0.0.0` when `PORT` is set and to localhost on port 4173 by default. Use one instance while rooms live in memory. Optional PostgreSQL stores bot snapshots across restarts. Accounts and persistent battle history are future work. At that point, decide where to store accounts and replays, how to execute background matches and training, and whether the UI needs live updates. Separate skill progression by minigame so chess, block stacking, and other future games can each use the rules and learning approach that fits them.
 
 ## Development status
 

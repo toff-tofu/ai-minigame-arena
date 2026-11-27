@@ -1,4 +1,4 @@
-import { placements, rankMoves, sameMove, starter, teach, type Weights } from "../ai/coaching.ts";
+import { isWeights, placements, rankMoves, sameMove, starter, teach, type Weights } from "../ai/coaching.ts";
 import { searchMoves, type Move } from "../ai/baselines.ts";
 import { startDuel, playTurn, type Duel } from "../game/duel.ts";
 import { HEIGHT, WIDTH, height, orientation, landingRow, drop, type Piece } from "../game/stacking.ts";
@@ -39,10 +39,7 @@ const storageKey = "stacking-arena-weights-v1";
 function loadWeights(): Weights {
   try {
     const value: unknown = JSON.parse(localStorage.getItem(storageKey) ?? "null");
-    if (Array.isArray(value) && value.length === 2 &&
-        value.every((weight) => typeof weight === "number" && Number.isFinite(weight) && Math.abs(weight) <= 16)) {
-      return [value[0], value[1]];
-    }
+    if (isWeights(value)) return value;
   } catch {
     // The viewer can still run when browser storage is unavailable.
   }
@@ -386,4 +383,60 @@ teachButton.onclick = () => {
     (oldRank && newRank ? `The bot’s original move ranked ${oldRank} → ${newRank}. ` : "") +
     `The updated bot would choose column ${after[0].column + 1}, ${after[0].turns * 90}°. ${persistence}`;
 };
+const recoveryCode = element<HTMLInputElement>("recovery-code");
+const saveBot = element<HTMLButtonElement>("save-bot");
+const loadBot = element<HTMLButtonElement>("load-bot-button");
+const saveStatus = element("bot-save-status");
+let savePending = false;
+
+async function sendBotSave(path: string, body: unknown) {
+  const response = await fetch(path, {
+    method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error);
+  return data;
+}
+
+async function runSaveAction(action: () => Promise<void>) {
+  if (savePending) return;
+  savePending = true;
+  saveBot.disabled = true;
+  loadBot.disabled = true;
+  saveStatus.textContent = "Working…";
+  try {
+    await action();
+  } catch (error) {
+    saveStatus.textContent = error instanceof Error ? error.message : "Could not complete the request.";
+  } finally {
+    savePending = false;
+    saveBot.disabled = false;
+    loadBot.disabled = false;
+  }
+}
+
+saveBot.onclick = () => void runSaveAction(async () => {
+  const { code } = await sendBotSave("/api/bot-saves", weights);
+  recoveryCode.value = code;
+  recoveryCode.select();
+  saveStatus.textContent = "Saved. Copy this private code and enter it on your other device.";
+});
+
+element<HTMLFormElement>("load-bot").onsubmit = (event) => {
+  event.preventDefault();
+  void runSaveAction(async () => {
+    const { weights: restored } = await sendBotSave("/api/bot-saves/load", recoveryCode.value.trim().toLowerCase());
+    if (!isWeights(restored)) throw new Error("The server returned an invalid bot.");
+    weights = restored;
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(weights));
+      saveStatus.textContent = "Bot loaded. Your next match will use its saved training.";
+    } catch {
+      saveStatus.textContent = "Bot loaded for this page session. Your next match will use its training.";
+    }
+    recoveryCode.value = "";
+    feedback.textContent = "";
+  });
+};
+
 render();
