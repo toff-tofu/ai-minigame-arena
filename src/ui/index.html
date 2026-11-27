@@ -18,8 +18,8 @@
     </header>
     <div id="boards">
       <section>
-        <h2>Height bot <output id="score-0">0</output></h2>
-        <canvas id="board-0" width="288" height="640" aria-label="Height bot board"></canvas>
+        <h2>Your bot <output id="score-0">0</output></h2>
+        <canvas id="board-0" width="288" height="640" aria-label="Your bot board"></canvas>
         <p id="bust-0"></p>
       </section>
       <section>
@@ -36,6 +36,20 @@
       <label>Turn <input id="timeline" type="range" min="0" max="0" value="0"></label>
       <output id="turn">0 / 0</output>
     </div>
+    <section id="coaching" aria-labelledby="coaching-title">
+      <h2 id="coaching-title">Coach your bot</h2>
+      <p id="coach-hint">Pause and rewind to just before one of your bot’s completed turns.</p>
+      <div id="coach-controls" hidden>
+        <label>Column <input id="coach-column" type="number" min="1" max="9" value="1"></label>
+        <label>Rotation <select id="coach-rotation">
+          <option value="0">0°</option><option value="1">90°</option>
+          <option value="2">180°</option><option value="3">270°</option>
+        </select></label>
+        <button id="teach">Teach move</button>
+      </div>
+      <p id="coach-preview"></p>
+      <p id="coach-feedback" role="status"></p>
+    </section>
   </main>
 </body>
 </html>

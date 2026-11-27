@@ -8,6 +8,7 @@ const routes = new Map([
   ["/ui/viewer.ts", ["./viewer.ts", "text/javascript"]],
   ["/game/duel.ts", ["../game/duel.ts", "text/javascript"]],
   ["/game/stacking.ts", ["../game/stacking.ts", "text/javascript"]],
+  ["/ai/coaching.ts", ["../ai/coaching.ts", "text/javascript"]],
   ["/ai/baselines.ts", ["../ai/baselines.ts", "text/javascript"]],
 ]);
 

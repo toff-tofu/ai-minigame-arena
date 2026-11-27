@@ -20,6 +20,12 @@ Run `npm run watch` and open `http://127.0.0.1:4173`. Choose a seed and press **
 
 **Pause** freezes the current search or drop. **Step** plays through the next turn and pauses. **Back** and the timeline review positions the bots have already played. **New match** starts a fresh duel with the chosen seed. The browser runs the bots and rules locally.
 
+### Teach a move
+
+Step through one of **Your bot**’s turns, then press **Back** once. In **Coach your bot**, choose a column and rotation. A valid drop appears in green on the board. Press **Teach move** to see how its ranking and the bot’s preferred placement change.
+
+Your bot scores stable drops using height and support margin. Each demonstration takes a bounded gradient step that increases the demonstrated move’s softmax preference. The live bot still picks its highest-scoring drop. A lesson may raise a move’s preference without changing the top-ranked move. The browser saves your bot’s weights locally and uses them when you start a new match. A match in progress keeps the weights it started with, so its replay stays consistent. The terminal benchmarks still use their fixed policies.
+
 ## Run bot matches
 
 ```sh
@@ -124,4 +130,4 @@ The local milestones can run on one machine with in-memory state or local files.
 
 ## Development status
 
-The human terminal duel, seeded bot matches, and live match viewer are playable. The next milestone is private coaching.
+The terminal duel, seeded bot matches, live match viewer, and coaching demonstrations are playable. Full private duels and match-outcome training are planned.

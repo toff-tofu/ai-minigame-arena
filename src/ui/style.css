@@ -22,3 +22,9 @@ input[type=number] { width: 7rem; }
 #play { background: #29559a; }
 #controls label { display: inline-flex; align-items: center; gap: 6px; }
 #status { min-height: 1.5em; }
+
+#coaching { margin-top: 20px; }
+#coaching p { color: #d2dcee; }
+#coach-controls:not([hidden]) { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+#coach-column { width: 3rem; }
+select { font: inherit; }
