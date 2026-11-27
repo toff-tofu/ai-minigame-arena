@@ -25,7 +25,7 @@ input[type=number] { width: 7rem; }
 
 #coaching { margin-top: 20px; }
 #coaching p { color: #d2dcee; }
-#coach-controls:not([hidden]) { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+#coach-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
 #coach-column { width: 3rem; }
 select { font: inherit; }
 

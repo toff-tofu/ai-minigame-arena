@@ -142,18 +142,22 @@ function appendMove(move: Move, player: 0 | 1) {
 function coachingState() {
   const duel = frames[cursor].duel;
   const next = frames[cursor + 1];
-  if (online || mode !== "paused" || duel.active !== 0 || next?.player !== 0 || !next.move) return;
-  const { board, turns } = duel.players[0];
-  return { next, board, piece: duel.pieces[turns], move: {
+  const seat = online?.seat ?? 0;
+  if (mode !== "paused" || duel.active !== seat || next?.player !== seat || !next.move) return;
+  const { board, turns } = duel.players[seat];
+  return { next, seat, board, piece: duel.pieces[turns], move: {
     column: columnInput.valueAsNumber - 1, turns: Number(rotationInput.value),
   } };
 }
 
 function renderCoaching(state: ReturnType<typeof coachingState>) {
-  element("coach-controls").hidden = !state;
+  columnInput.disabled = !state;
+  rotationInput.disabled = !state;
   element("coach-hint").textContent = state
-    ? `Try a different drop for this ${state.piece}. Lessons apply to your next new match.`
-    : "Pause and rewind to just before one of your bot’s completed turns.";
+    ? `Try a different drop for this ${state.piece}. Lessons apply the next time you create or join a battle or start a local match.`
+    : online
+      ? "Use Back or the timeline to go to just before one of your bot’s completed turns."
+      : "Pause and rewind to just before one of your bot’s completed turns.";
   if (teachingFrame !== state?.next) {
     teachingFrame = state?.next;
     feedback.textContent = "";
@@ -182,7 +186,6 @@ function render() {
   const coaching = coachingState();
   const preview = renderCoaching(coaching);
   const labels = online ? ["Player 1", "Player 2"] : names;
-  element("coaching").hidden = Boolean(online);
   const remotePose = live ? online?.pose : undefined;
   for (const [i, ctx] of contexts.entries()) {
     ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
@@ -194,7 +197,7 @@ function render() {
       const fresh = frame.player === i && frame.added?.includes(cell);
       drawCell(ctx, cell % WIDTH, Math.floor(cell / WIDTH), fresh ? "#f3f8ff" : colors[i]);
     }
-    if (i === 0 && coaching && preview?.kind === "placed") {
+    if (coaching?.seat === i && preview?.kind === "placed") {
       for (const cell of preview.board) {
         if (!player.board.has(cell)) drawCell(ctx, cell % WIDTH, Math.floor(cell / WIDTH), "#a9f1ad");
       }
