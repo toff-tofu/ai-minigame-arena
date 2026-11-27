@@ -14,6 +14,12 @@ npm run play -- 42
 
 Two players take turns at the same terminal. Enter a column from 1 to 9 and one of the four rotations in degrees, for example `3 90`. The column is the left edge of the rotated piece. The game shows all four rotations before each turn, with the boards and scores side by side. Enter `q` to quit. Pass a seed to replay the same piece sequence, or omit it to draw a new one.
 
+## Watch a match
+
+Run `npm run watch` and open `http://127.0.0.1:4173`. Choose a seed and press **Play**. Each bot tests one placement at a time during its turn. The piece moves and rotates in the preview area while the bot evaluates placements, then falls into the chosen spot. The newest blocks are highlighted, and the board reports the reason for a bust.
+
+**Pause** freezes the current search or drop. **Step** plays through the next turn and pauses. **Back** and the timeline review positions the bots have already played. **New match** starts a fresh duel with the chosen seed. The browser runs the bots and rules locally.
+
 ## Run bot matches
 
 ```sh
@@ -118,4 +124,4 @@ The local milestones can run on one machine with in-memory state or local files.
 
 ## Development status
 
-The human terminal duel and seeded bot matches are playable. The next milestone is a visual replay.
+The human terminal duel, seeded bot matches, and live match viewer are playable. The next milestone is private coaching.

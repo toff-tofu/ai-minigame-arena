@@ -80,6 +80,14 @@ type Drop =
   | { kind: "bust"; reason: string }
   | { kind: "placed"; board: Board; margin: number };
 
+export function landingRow(board: Board, cells: readonly Cell[], column: number): number {
+  let bottom = HEIGHT;
+  while (cells.every(([x, y]) => y + bottom > 0 && !board.has((y + bottom - 1) * WIDTH + x + column))) {
+    bottom--;
+  }
+  return bottom;
+}
+
 export function drop(board: Board, piece: Piece, column: number, turns: number): Drop {
   if (!Number.isInteger(turns) || turns < 0 || turns > 3) {
     return { kind: "invalid", reason: "Orientation must be 0, 90, 180, or 270 degrees." };
@@ -89,10 +97,7 @@ export function drop(board: Board, piece: Piece, column: number, turns: number):
     return { kind: "invalid", reason: "The piece must fit within the board's columns." };
   }
 
-  let bottom = HEIGHT;
-  while (cells.every(([x, y]) => y + bottom > 0 && !board.has((y + bottom - 1) * WIDTH + x + column))) {
-    bottom--;
-  }
+  const bottom = landingRow(board, cells, column);
   if (cells.some(([, y]) => y + bottom >= HEIGHT)) {
     return { kind: "bust", reason: "The piece landed above the top of the board." };
   }

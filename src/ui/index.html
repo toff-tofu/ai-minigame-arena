@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Stacking Arena</title>
+  <link rel="stylesheet" href="/ui/style.css">
+  <script type="module" src="/ui/viewer.ts"></script>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>Stacking Arena</h1>
+      <form id="match">
+        <label>Seed <input id="seed" type="number" min="0" max="4294967295" value="42" required></label>
+        <button>New match</button>
+      </form>
+    </header>
+    <div id="boards">
+      <section>
+        <h2>Height bot <output id="score-0">0</output></h2>
+        <canvas id="board-0" width="288" height="640" aria-label="Height bot board"></canvas>
+        <p id="bust-0"></p>
+      </section>
+      <section>
+        <h2>Stability bot <output id="score-1">0</output></h2>
+        <canvas id="board-1" width="288" height="640" aria-label="Stability bot board"></canvas>
+        <p id="bust-1"></p>
+      </section>
+    </div>
+    <p id="status" role="status"></p>
+    <div id="controls">
+      <button id="play">Play</button>
+      <button id="back">Back</button>
+      <button id="step">Step</button>
+      <label>Turn <input id="timeline" type="range" min="0" max="0" value="0"></label>
+      <output id="turn">0 / 0</output>
+    </div>
+  </main>
+</body>
+</html>
