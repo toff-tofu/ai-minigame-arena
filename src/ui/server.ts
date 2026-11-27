@@ -1,3 +1,4 @@
+import { connectAccounts } from "../online/accounts.ts";
 import { connectBotSaves, handleBotSave } from "../online/bot-saves.ts";
 import { createRooms } from "../online/rooms.ts";
 import { createServer } from "node:http";
@@ -8,6 +9,8 @@ const routes = new Map([
   ["/", ["./index.html", "text/html"]],
   ["/ui/style.css", ["./style.css", "text/css"]],
   ["/ui/viewer.ts", ["./viewer.ts", "text/javascript"]],
+  ["/game/catalog.ts", ["../game/catalog.ts", "text/javascript"]],
+  ["/ai/game-policy.ts", ["../ai/game-policy.ts", "text/javascript"]],
   ["/game/duel.ts", ["../game/duel.ts", "text/javascript"]],
   ["/game/stacking.ts", ["../game/stacking.ts", "text/javascript"]],
   ["/ai/coaching.ts", ["../ai/coaching.ts", "text/javascript"]],
@@ -16,11 +19,19 @@ const routes = new Map([
 
 const rooms = createRooms();
 const saves = process.env.DATABASE_URL ? await connectBotSaves(process.env.DATABASE_URL) : undefined;
+const accounts = await connectAccounts();
 const server = createServer(async (request, response) => {
   const path = request.url?.split("?")[0] ?? "";
-  if (path.startsWith("/api/")) {
+  if (path.startsWith("/api/") || path.startsWith("/auth/")) {
     try {
-      if (path.startsWith("/api/bot-saves")) {
+      if (path.startsWith("/api/account") || path.startsWith("/auth/")) {
+        if (accounts) await accounts(request, response, path);
+        else {
+          response.writeHead(path === "/api/account" && request.method === "GET" ? 200 : 503,
+            { "Content-Type": "application/json", "Cache-Control": "no-store" });
+          response.end(JSON.stringify({ enabled: false, error: "Google sign-in is not configured." }));
+        }
+      } else if (path.startsWith("/api/bot-saves")) {
         await handleBotSave(request, response, path, saves);
       } else {
         await rooms.handle(request, response, path);

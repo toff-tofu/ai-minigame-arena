@@ -1,3 +1,5 @@
+import { games, isGameId, type GameId, type Position } from "../game/catalog.ts";
+import { searchGame } from "../ai/game-policy.ts";
 import { randomBytes } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { searchMoves, type Move } from "../ai/baselines.ts";
@@ -9,6 +11,7 @@ type PlayedMove = Move & { player: 0 | 1 };
 type Pose = PlayedMove & { piece: Piece; row: number; dropping: boolean };
 type Room = {
   seed: number;
+  catalog?: { id: GameId; position: Position; moves: number[]; candidate?: number };
   models: [Weights, Weights?];
   duel: Duel;
   moves: PlayedMove[];
@@ -23,21 +26,28 @@ function send(response: ServerResponse, status: number, data: unknown) {
   response.end(JSON.stringify(data));
 }
 
-async function readWeights(request: IncomingMessage): Promise<Weights | undefined> {
+async function readEntry(request: IncomingMessage): Promise<{ weights: Weights; game?: GameId } | undefined> {
   let body = "";
-  for await (const chunk of request) {
+  for await (const chunk of request.iterator({ destroyOnReturn: false })) {
     body += chunk.toString();
     if (body.length > 256) return;
   }
   try {
     const value: unknown = JSON.parse(body);
-    if (isWeights(value)) return value;
+    if (isWeights(value)) return { weights: value };
+    if (value && typeof value === "object" && "weights" in value && isWeights(value.weights) &&
+        "game" in value && isGameId(value.game)) return { weights: value.weights, game: value.game };
   } catch {
     return;
   }
 }
 
 function snapshot(room: Room) {
+  if (room.catalog) {
+    const { id, moves, candidate, position } = room.catalog;
+    return { seed: room.seed, game: id, catalogMoves: moves, candidate,
+      phase: !room.models[1] ? "waiting" : position.outcome === "playing" ? "playing" : "finished" };
+  }
   return { seed: room.seed, moves: room.moves, pose: room.pose,
     phase: !room.models[1] ? "waiting" : room.duel.outcome === "playing" ? "playing" : "finished" };
 }
@@ -90,12 +100,85 @@ function runTurn(room: Room, delay: number) {
   examine();
 }
 
+function runCatalogTurn(room: Room, delay: number) {
+  const catalog = room.catalog!;
+  const { position, id } = catalog;
+  const search = searchGame(id, position, room.models[position.active]!);
+  function examine() {
+    const next = search.next();
+    if (!next.done) {
+      catalog.candidate = next.value;
+      broadcast(room);
+      room.timer = setTimeout(examine, delay * 2);
+      return;
+    }
+    catalog.position = games[id].apply(position, next.value);
+    catalog.moves.push(next.value);
+    catalog.candidate = undefined;
+    broadcast(room);
+    if (catalog.position.outcome === "playing") {
+      room.timer = setTimeout(() => runCatalogTurn(room, delay), delay * 14);
+    }
+  }
+  examine();
+}
+
 export function createRooms(delay = 38) {
   const rooms = new Map<string, Room>();
   let closed = false;
+  const waiting = new Map<ServerResponse, { weights: Weights; game?: GameId }>();
+  function createRoom(weights: Weights, game?: GameId) {
+    let code: string;
+    do { code = randomBytes(6).toString("hex").toUpperCase(); } while (rooms.has(code));
+    const seed = randomBytes(4).readUInt32LE();
+    const room: Room = { seed, models: [weights], duel: startDuel(seed), moves: [], viewers: new Set() };
+    if (game) room.catalog = { id: game, position: games[game].start(seed), moves: [] };
+    rooms.set(code, room);
+    room.expiry = setTimeout(() => {
+      rooms.delete(code);
+      clearTimeout(room.timer);
+      for (const viewer of room.viewers) viewer.end();
+    }, 30 * 60 * 1000);
+    room.expiry.unref();
+    return { code, room };
+  }
+  function start(room: Room, weights: Weights) {
+    room.models[1] = weights;
+    room.timer = setTimeout(() => room.catalog ? runCatalogTurn(room, delay) : runTurn(room, delay), delay * 10);
+    broadcast(room);
+  }
+  async function matchmake(request: IncomingMessage, response: ServerResponse) {
+    const entry = await readEntry(request);
+    if (!entry) return send(response, 400, { error: "Invalid bot model." });
+    if (response.destroyed) return;
+    if (closed || rooms.size >= 100) return send(response, 503, { error: "Arena is busy. Try again shortly." });
+
+    for (const [partner, queued] of waiting) {
+      if (queued.game !== entry.game) continue;
+      waiting.delete(partner);
+      if (partner.destroyed) continue;
+      const { code, room } = createRoom(queued.weights, queued.game);
+      send(partner, 200, { code, seed: room.seed, seat: 0, game: room.catalog?.id });
+      send(response, 200, { code, seed: room.seed, seat: 1, game: room.catalog?.id });
+      start(room, entry.weights);
+      return;
+    }
+    if (waiting.size >= 100) return send(response, 503, { error: "Queue is full." });
+    waiting.set(response, entry);
+    const expires = setTimeout(() => {
+      waiting.delete(response);
+      send(response, 408, { error: "Nobody joined yet. Try again or invite a friend." });
+    }, 25_000);
+    response.once("close", () => {
+      clearTimeout(expires);
+      waiting.delete(response);
+    });
+  }
   return {
     close() {
       closed = true;
+      for (const response of waiting.keys()) send(response, 503, { error: "Server is closing." });
+      waiting.clear();
       for (const room of rooms.values()) {
         clearTimeout(room.timer);
         clearTimeout(room.expiry);
@@ -105,36 +188,25 @@ export function createRooms(delay = 38) {
     },
     async handle(request: IncomingMessage, response: ServerResponse, path: string) {
       if (closed) return send(response, 503, { error: "Server is closing." });
+      if (request.method === "POST" && path === "/api/matchmaking") return matchmake(request, response);
       if (request.method === "POST" && path === "/api/battles") {
-        const weights = await readWeights(request);
-        if (!weights) return send(response, 400, { error: "Invalid bot model." });
+        const entry = await readEntry(request);
+        if (!entry) return send(response, 400, { error: "Invalid bot model." });
         if (closed) return send(response, 503, { error: "Server is closing." });
         if (rooms.size >= 100) return send(response, 503, { error: "Too many rooms. Try again later." });
-        let code: string;
-        do { code = randomBytes(6).toString("hex").toUpperCase(); } while (rooms.has(code));
-        const seed = randomBytes(4).readUInt32LE();
-        const room: Room = { seed, models: [weights], duel: startDuel(seed), moves: [], viewers: new Set() };
-        rooms.set(code, room);
-        room.expiry = setTimeout(() => {
-          rooms.delete(code);
-          clearTimeout(room.timer);
-          for (const viewer of room.viewers) viewer.end();
-        }, 30 * 60 * 1000);
-        room.expiry.unref();
-        return send(response, 201, { code, seed, seat: 0 });
+        const { code, room } = createRoom(entry.weights, entry.game);
+        return send(response, 201, { code, seed: room.seed, seat: 0, game: room.catalog?.id });
       }
       const route = /^\/api\/battles\/([A-F0-9]{12})\/(join|events)$/.exec(path);
       const room = route && rooms.get(route[1]);
       if (!room) return send(response, 404, { error: "Battle room not found or expired." });
       if (route[2] === "join" && request.method === "POST") {
-        const weights = await readWeights(request);
-        if (!weights) return send(response, 400, { error: "Invalid bot model." });
+        const entry = await readEntry(request);
+        if (!entry) return send(response, 400, { error: "Invalid bot model." });
         if (rooms.get(route[1]) !== room) return send(response, 404, { error: "Battle room expired." });
         if (room.models[1]) return send(response, 409, { error: "This battle already has two bots." });
-        room.models[1] = weights;
-        send(response, 200, { code: route[1], seed: room.seed, seat: 1 });
-        room.timer = setTimeout(() => runTurn(room, delay), delay * 10);
-        broadcast(room);
+        send(response, 200, { code: route[1], seed: room.seed, seat: 1, game: room.catalog?.id });
+        start(room, entry.weights);
         return;
       }
       if (route[2] === "events" && request.method === "GET") {

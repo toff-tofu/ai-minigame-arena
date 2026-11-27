@@ -3,27 +3,78 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Stacking Arena</title>
+  <title>AI Minigame Arena</title>
   <link rel="stylesheet" href="/ui/style.css">
   <script type="module" src="/ui/viewer.ts"></script>
 </head>
 <body>
   <main>
     <header>
-      <h1>Stacking Arena</h1>
+      <h1>AI Minigame Arena</h1>
       <form id="match">
+        <label>Game <select id="game"><option value="stacking">Block Stacking</option></select></label>
         <label>Seed <input id="seed" type="number" min="0" max="4294967295" value="42" required></label>
-        <button>New match</button>
+        <button>Practice match</button>
       </form>
     </header>
+    <div class="arena-layout">
+    <aside class="lobby">
     <section id="online" aria-labelledby="online-title">
-      <h2 id="online-title">Invite-code battle</h2>
-      <button id="create-battle" type="button">Create battle</button>
+      <h2 id="online-title">Play online</h2>
+      <div class="match-actions">
+        <button id="quick-match" type="button" class="primary">Find opponent</button>
+      <button id="create-battle" type="button">Invite a friend</button>
+      </div>
       <form id="join-battle">
         <label>Invite code <input id="battle-code" type="text" required maxlength="12" pattern="[A-Fa-f0-9]{12}" autocomplete="off"></label>
         <button>Join battle</button>
       </form>
       <p id="battle-note" role="status"></p>
+    </section>
+    <section id="coaching" aria-labelledby="coaching-title">
+      <h2 id="coaching-title">Coach your bot</h2>
+      <button id="coach-last" type="button" disabled>Coach my last move</button>
+      <p id="coach-hint">Pause and rewind to just before one of your bot’s completed turns.</p>
+      <div id="coach-controls">
+        <label>Column <input id="coach-column" type="number" min="1" max="9" value="1" disabled></label>
+        <label>Rotation <select id="coach-rotation" disabled>
+          <option value="0">0°</option><option value="1">90°</option>
+          <option value="2">180°</option><option value="3">270°</option>
+        </select></label>
+        <button id="teach" disabled>Teach move</button>
+      </div>
+      <p id="coach-preview"></p>
+      <p id="coach-feedback" role="status"></p>
+    </section>
+    <section id="account" aria-labelledby="account-title" hidden>
+      <h2 id="account-title">Your account</h2>
+      <a id="sign-in" href="/auth/google">Sign in with Google</a>
+      <div id="account-actions" class="match-actions" hidden>
+        <button id="save-account" type="button">Save training</button>
+        <button id="load-account" type="button">Load training</button>
+        <button id="sign-out" type="button">Sign out</button>
+      </div>
+      <p id="account-status" role="status"></p>
+    </section>
+    <details id="bot-saves" aria-labelledby="bot-saves-title">
+      <summary id="bot-saves-title">Transfer with a recovery code</summary>
+      <button id="save-bot" type="button">Save bot</button>
+      <form id="load-bot">
+        <label>Recovery code
+          <input id="recovery-code" type="text" required minlength="48" maxlength="48"
+                 pattern="[A-Fa-f0-9]{48}" autocomplete="off" spellcheck="false">
+        </label>
+        <button id="load-bot-button">Load bot</button>
+      </form>
+      <p id="bot-save-status" role="status">Save a copy after training. Loading a code replaces this browser’s current bot.</p>
+    </details>
+    </aside>
+    <div class="match-view">
+    <section id="catalog-board" hidden>
+      <h2 id="catalog-title"></h2>
+      <p id="catalog-rules"></p>
+      <div id="catalog-grid" role="group" aria-label="Game board"></div>
+      <p id="catalog-move"></p>
     </section>
     <div id="boards">
       <section>
@@ -45,33 +96,8 @@
       <label>Turn <input id="timeline" type="range" min="0" max="0" value="0"></label>
       <output id="turn">0 / 0</output>
     </div>
-    <section id="coaching" aria-labelledby="coaching-title">
-      <h2 id="coaching-title">Coach your bot</h2>
-      <button id="coach-last" type="button" disabled>Coach my last move</button>
-      <p id="coach-hint">Pause and rewind to just before one of your bot’s completed turns.</p>
-      <div id="coach-controls">
-        <label>Column <input id="coach-column" type="number" min="1" max="9" value="1" disabled></label>
-        <label>Rotation <select id="coach-rotation" disabled>
-          <option value="0">0°</option><option value="1">90°</option>
-          <option value="2">180°</option><option value="3">270°</option>
-        </select></label>
-        <button id="teach" disabled>Teach move</button>
-      </div>
-      <p id="coach-preview"></p>
-      <p id="coach-feedback" role="status"></p>
-    </section>
-    <section id="bot-saves" aria-labelledby="bot-saves-title">
-      <h2 id="bot-saves-title">Use your bot on another device</h2>
-      <button id="save-bot" type="button">Save bot</button>
-      <form id="load-bot">
-        <label>Recovery code
-          <input id="recovery-code" type="text" required minlength="48" maxlength="48"
-                 pattern="[A-Fa-f0-9]{48}" autocomplete="off" spellcheck="false">
-        </label>
-        <button id="load-bot-button">Load bot</button>
-      </form>
-      <p id="bot-save-status" role="status">Save a copy after training. Loading a code replaces this browser’s current bot.</p>
-    </section>
+    </div>
+    </div>
   </main>
 </body>
 </html>

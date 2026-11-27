@@ -1,3 +1,5 @@
+import { searchGame } from "../ai/game-policy.ts";
+import { games, isGameId, type GameId, type Position } from "../game/catalog.ts";
 import { isWeights, placements, rankMoves, sameMove, starter, teach, type Weights } from "../ai/coaching.ts";
 import { searchMoves, type Move } from "../ai/baselines.ts";
 import { startDuel, playTurn, type Duel } from "../game/duel.ts";
@@ -55,7 +57,24 @@ const feedback = element("coach-feedback");
 let teachingFrame: Frame | undefined;
 
 type OnlinePose = Pose & { player: 0 | 1; piece: Piece; dropping: boolean };
+const gameSelect = element<HTMLSelectElement>("game");
+for (const [id, rules] of Object.entries(games)) gameSelect.add(new Option(rules.title, id));
+type CatalogMatch = { id: GameId; positions: Position[]; moves: number[]; candidate?: number;
+  search?: Generator<number, number> };
+let catalog: CatalogMatch | undefined;
+
+function startCatalog(id: GameId, seed: number): CatalogMatch {
+  return { id, positions: [games[id].start(seed)], moves: [] };
+}
+
+function appendCatalogMove(match: CatalogMatch, move: number) {
+  match.moves.push(move);
+  match.positions.push(games[match.id].apply(match.positions.at(-1)!, move));
+}
+
 type OnlineSnapshot = {
+  catalogMoves?: number[];
+  candidate?: number;
   seed: number;
   moves: (Move & { player: 0 | 1 })[];
   pose?: OnlinePose;
@@ -66,18 +85,25 @@ type OnlineBattle = { code: string; seed: number; seat: 0 | 1; stream: EventSour
 let online: OnlineBattle | undefined;
 let requestPending = false;
 const battleNote = element("battle-note");
+const quickMatch = element<HTMLButtonElement>("quick-match");
+let matchSearch: AbortController | undefined;
 const createBattle = element<HTMLButtonElement>("create-battle");
 const joinBattle = element<HTMLFormElement>("join-battle");
 const battleCode = element<HTMLInputElement>("battle-code");
 
-async function enterBattle(code?: string) {
+async function enterBattle(code?: string, random = false) {
   if (requestPending) return;
   requestPending = true;
   createBattle.disabled = true;
-  battleNote.textContent = "Connecting…";
+  const search = random ? new AbortController() : undefined;
+  matchSearch = search;
+  quickMatch.textContent = random ? "Cancel search" : "Find opponent";
+  quickMatch.disabled = !random;
+  battleNote.textContent = random ? "Looking for another player…" : "Connecting…";
   try {
-    const response = await fetch(code ? `/api/battles/${code}/join` : "/api/battles", {
-      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(weights),
+    const response = await fetch(random ? "/api/matchmaking" : code ? `/api/battles/${code}/join` : "/api/battles", {
+      signal: search?.signal,
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(!code && isGameId(gameSelect.value) ? { weights, game: gameSelect.value } : weights),
     });
     const result = await response.json();
     if (!response.ok) throw new Error(result.error);
@@ -86,21 +112,29 @@ async function enterBattle(code?: string) {
     turn = undefined;
     cursor = 0;
     frames = [{ duel: startDuel(result.seed) }];
+    catalog = isGameId(result.game) ? startCatalog(result.game, result.seed) : undefined;
+    gameSelect.value = catalog?.id ?? "stacking";
     const stream = new EventSource(`/api/battles/${result.code}/events`);
     online = { ...result, stream, phase: "waiting" };
     battleCode.value = result.code;
-    battleNote.textContent = `Invite code ${result.code}. Share it with the other player.`;
+    battleNote.textContent = random ? "Opponent found."
+      : `Invite code ${result.code}. Share it with the other player.`;
     stream.onmessage = (event) => {
       if (online?.stream !== stream) return;
       const snapshot: OnlineSnapshot = JSON.parse(event.data);
-      const following = cursor === frames.length - 1;
-      for (const move of snapshot.moves.slice(frames.length - 1)) {
-        appendMove(move, move.player);
+      if (catalog) {
+        const following = cursor === catalog.moves.length;
+        for (const move of (snapshot.catalogMoves ?? []).slice(catalog.moves.length)) appendCatalogMove(catalog, move);
+        if (following) cursor = catalog.moves.length;
+        catalog.candidate = snapshot.candidate;
+      } else {
+        const following = cursor === frames.length - 1;
+        for (const move of snapshot.moves.slice(frames.length - 1)) appendMove(move, move.player);
+        if (following) cursor = frames.length - 1;
       }
-      if (following) cursor = frames.length - 1;
       online.pose = snapshot.pose;
       online.phase = snapshot.phase;
-      battleNote.textContent = online.phase === "waiting"
+      battleNote.textContent = online.phase === "waiting" && !random
         ? `Invite code ${online.code}. Waiting for the other player.`
         : `Battle ${online.code} · Seed ${snapshot.seed}`;
       if (online.phase === "finished") stream.close();
@@ -115,13 +149,18 @@ async function enterBattle(code?: string) {
     };
     render();
   } catch (error) {
-    battleNote.textContent = error instanceof Error ? error.message : "Could not connect to battle.";
+    battleNote.textContent = search?.signal.aborted ? "Search canceled."
+      : error instanceof Error ? error.message : "Could not connect to battle.";
   } finally {
     requestPending = false;
     createBattle.disabled = false;
+    matchSearch = undefined;
+    quickMatch.textContent = "Find opponent";
+    quickMatch.disabled = false;
   }
 }
 
+quickMatch.onclick = () => matchSearch ? matchSearch.abort() : void enterBattle(undefined, true);
 createBattle.onclick = () => void enterBattle();
 joinBattle.onsubmit = (event) => {
   event.preventDefault();
@@ -179,7 +218,76 @@ function drawCell(ctx: CanvasRenderingContext2D, x: number, y: number, color: st
     cellSize - 2 * inset, cellSize - 2 * inset);
 }
 
+function renderCatalog(match: CatalogMatch) {
+  const rules = games[match.id];
+  const position = match.positions[cursor];
+  const last = match.moves.length;
+  const live = cursor === last;
+  const labels = online ? ["Player 1", "Player 2"] : ["Your bot", "Practice bot"];
+  if (online) labels[online.seat] += " · Your bot";
+  element("catalog-title").textContent = rules.title;
+  element("catalog-rules").textContent = rules.instructions;
+  const grid = element("catalog-grid");
+  grid.style.setProperty("--columns", String(Math.min(rules.columns, position.cells.length)));
+  const candidate = live ? match.candidate : undefined;
+  const preview = (move: number) => rules.preview?.(move) ?? { cell: move, label: `Testing tile ${move + 1}` };
+  const lastMove = match.moves[cursor - 1];
+  grid.replaceChildren(...position.cells.map((value, i) => {
+    const cell = document.createElement("span");
+    cell.textContent = rules.label(value);
+    if (candidate !== undefined && i === preview(candidate).cell) cell.dataset.candidate = "";
+    if (lastMove !== undefined && i === preview(lastMove).cell) cell.dataset.last = "";
+    return cell;
+  }));
+  element("catalog-move").textContent = candidate === undefined ? "" : preview(candidate).label;
+  const message = online?.phase === "waiting" ? "Waiting for a second bot."
+    : position.outcome === "draw" ? "Draw."
+    : position.outcome !== "playing" ? `${labels[position.outcome]} wins.`
+    : live ? `${labels[position.active]} to move.` : `Reviewing turn ${cursor}.`;
+  if (status.textContent !== message) status.textContent = message;
+  play.textContent = mode === "paused" ? "Play" : "Pause";
+  play.disabled = Boolean(online) || (live && position.outcome !== "playing");
+  step.disabled = online ? live : mode !== "paused" || (live && position.outcome !== "playing");
+  back.disabled = cursor === 0;
+  timeline.disabled = last === 0;
+  timeline.max = String(last);
+  timeline.value = String(cursor);
+  element("turn").textContent = `${cursor} / ${last}`;
+}
+
+function advanceCatalog(match: CatalogMatch) {
+  let delay = 100;
+  if (cursor < match.moves.length) {
+    cursor++;
+    delay = 350;
+    if (mode === "step") mode = "paused";
+  } else {
+    const position = match.positions[cursor];
+    if (position.outcome !== "playing") mode = "paused";
+    else {
+      match.search ??= searchGame(match.id, position, position.active === 0 ? matchWeights : [2, 7]);
+      const next = match.search.next();
+      if (next.done) {
+        appendCatalogMove(match, next.value);
+        cursor++;
+        match.search = undefined;
+        match.candidate = undefined;
+        delay = 430;
+        if (mode === "step" || match.positions[cursor].outcome !== "playing") mode = "paused";
+      } else {
+        match.candidate = next.value;
+      }
+    }
+  }
+  render();
+  if (mode !== "paused") timer = window.setTimeout(advance, delay);
+}
+
 function render() {
+  element("coaching").hidden = Boolean(catalog);
+  element("boards").hidden = Boolean(catalog);
+  element("catalog-board").hidden = !catalog;
+  if (catalog) return renderCatalog(catalog);
   const frame = frames[cursor];
   const live = cursor === frames.length - 1;
   const coaching = coachingState();
@@ -240,6 +348,7 @@ function render() {
 function advance() {
   timer = undefined;
   if (mode === "paused") return;
+  if (catalog) return advanceCatalog(catalog);
   let delay = 38;
   if (cursor < frames.length - 1) {
     cursor++;
@@ -299,7 +408,7 @@ play.onclick = () => {
 };
 step.onclick = () => {
   if (online) {
-    if (cursor < frames.length - 1) cursor++;
+    if (cursor < (catalog?.moves.length ?? frames.length - 1)) cursor++;
     render();
     return;
   }
@@ -327,6 +436,7 @@ element<HTMLFormElement>("match").onsubmit = (event) => {
   cursor = 0;
   matchWeights = weights;
   frames = [{ duel: startDuel(seedInput.valueAsNumber) }];
+  catalog = isGameId(gameSelect.value) ? startCatalog(gameSelect.value, seedInput.valueAsNumber) : undefined;
   render();
 };
 coachLast.onclick = () => {
@@ -439,4 +549,63 @@ element<HTMLFormElement>("load-bot").onsubmit = (event) => {
   });
 };
 
+let accountVersion: number | undefined;
+const accountStatus = element("account-status");
+const accountPanel = element("account");
+const accountActions = element("account-actions");
+const signIn = element("sign-in");
+
+async function accountRequest(method = "GET", path = "/api/account", body?: unknown) {
+  const response = await fetch(path, {
+    method, headers: body ? { "Content-Type": "application/json" } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error);
+  return data;
+}
+
+async function loadAccount(restore: boolean) {
+  const data = await accountRequest();
+  accountPanel.hidden = !data.enabled;
+  accountActions.hidden = !data.signedIn;
+  signIn.hidden = Boolean(data.signedIn);
+  accountVersion = data.version;
+  if (restore && isWeights(data.weights)) {
+    weights = data.weights;
+    try { localStorage.setItem(storageKey, JSON.stringify(weights)); } catch {}
+    accountStatus.textContent = "Training loaded. It will apply to your next match.";
+  } else if (data.signedIn) {
+    accountStatus.textContent = isWeights(data.weights)
+      ? "Load saved training or save this device’s current bot."
+      : "Save your training to use this bot on another device.";
+  } else {
+    accountStatus.textContent = new URLSearchParams(location.search).get("signin") === "failed"
+      ? "Google sign-in did not complete. Try again." : "";
+  }
+}
+
+function accountAction(action: () => Promise<void>) {
+  return async (event: MouseEvent) => {
+    const button = event.currentTarget as HTMLButtonElement;
+    button.disabled = true;
+    try { await action(); }
+    catch (error) { accountStatus.textContent = error instanceof Error ? error.message : "Account request failed."; }
+    finally { button.disabled = false; }
+  };
+}
+element("save-account").onclick = accountAction(async () => {
+  const data = await accountRequest("PUT", "/api/account", { weights, version: accountVersion });
+  accountVersion = data.version;
+  accountStatus.textContent = "Training saved to your account.";
+});
+element("load-account").onclick = accountAction(async () => loadAccount(true));
+element("sign-out").onclick = accountAction(async () => {
+  await accountRequest("POST", "/api/account/logout");
+  await loadAccount(false);
+});
+void loadAccount(false).catch(() => {});
+gameSelect.onchange = () => {
+  if (!online && !requestPending) element<HTMLFormElement>("match").requestSubmit();
+};
 render();

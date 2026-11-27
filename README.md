@@ -40,6 +40,22 @@ A code restores a snapshot of the weights at the time of saving. Save again for 
 
 On Railway, add a PostgreSQL service to the existing project. In the Node service’s **Variables**, add a reference named `DATABASE_URL` to the database service’s `DATABASE_URL` (for example, `${{Postgres.DATABASE_URL}}` if the service is named Postgres). Deploy the changes. The Node service creates the save table on startup. For local PostgreSQL, run `npm ci`, supply your connection string as the `DATABASE_URL` environment variable, and run `npm start`. With no database URL, local coaching and invite battles still work.
 
+## Games and matchmaking
+
+Pick **Block Stacking**, **Tic-tac-toe**, **Four in a Row**, **Takeaway**, **Three Heaps**, or **Number Draft**. Use **Practice match** to watch the local bots. **Find opponent** pairs you with another waiting player who chose the same game. Cancel whenever you like, or use **Invite a friend** and send them the code. A friend’s code opens the game chosen by the host.
+
+Every game supplies its rules, legal moves, and a position evaluation. The five catalog games share one search policy, which considers each move and the opponent’s replies in turn. The same two trained weights also drive the stacking policy. Demonstration coaching is available in Block Stacking.
+
+## Enable Google sign-in
+
+With PostgreSQL already configured, create a **Web application** OAuth client in Google Cloud. Register `https://YOUR-RAILWAY-DOMAIN/auth/google/callback` as an authorized redirect URI. Set these variables on the Railway game service and deploy the changes:
+
+- `APP_ORIGIN` is your arena’s public origin, such as `https://your-app.up.railway.app`.
+- `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` come from the web application OAuth client.
+- `DATABASE_URL` is the existing database reference.
+
+If Google is in testing mode, add everyone trying sign-in as a test user. Sign in from the arena and click **Save training**. On another device, sign in with the same account and click **Load training**. A save checks the revision so it cannot silently overwrite a newer save from another device. Recovery codes remain available under **Transfer with a recovery code**.
+
 ## Run bot matches
 
 ```sh
@@ -140,7 +156,7 @@ When online play arrives, trusted match execution should determine results and t
 
 ## Server decision
 
-The local milestones can run on one machine with in-memory state or local files. The invite-code prototype can run as a single Node.js service. On a host that supplies `PORT`, start it with `npm start`. It binds to `0.0.0.0` when `PORT` is set and to localhost on port 4173 by default. Use one instance while rooms live in memory. Optional PostgreSQL stores bot snapshots across restarts. Accounts and persistent battle history are future work. At that point, decide where to store accounts and replays, how to execute background matches and training, and whether the UI needs live updates. Separate skill progression by minigame so chess, block stacking, and other future games can each use the rules and learning approach that fits them.
+The local milestones can run on one machine with in-memory state or local files. The invite-code prototype can run as a single Node.js service. On a host that supplies `PORT`, start it with `npm start`. It binds to `0.0.0.0` when `PORT` is set and to localhost on port 4173 by default. Use one instance while rooms live in memory. Optional PostgreSQL stores bot snapshots across restarts. Optional Google sign-in associates training with an account. Persistent battle history is future work. At that point, decide where to store accounts and replays, how to execute background matches and training, and whether the UI needs live updates. Separate skill progression by minigame so chess, block stacking, and other future games can each use the rules and learning approach that fits them.
 
 ## Development status
 
