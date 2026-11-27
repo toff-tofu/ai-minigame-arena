@@ -28,3 +28,8 @@ input[type=number] { width: 7rem; }
 #coach-controls:not([hidden]) { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
 #coach-column { width: 3rem; }
 select { font: inherit; }
+
+#online { margin-top: 16px; }
+#join-battle { display: inline-flex; flex-wrap: wrap; margin: 6px 0; }
+#battle-code { font: inherit; width: 9rem; }
+#battle-note { color: #d2dcee; }

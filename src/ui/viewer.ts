@@ -56,10 +56,93 @@ const teachButton = element<HTMLButtonElement>("teach");
 const feedback = element("coach-feedback");
 let teachingFrame: Frame | undefined;
 
+type OnlinePose = Pose & { player: 0 | 1; piece: Piece; dropping: boolean };
+type OnlineSnapshot = {
+  seed: number;
+  moves: (Move & { player: 0 | 1 })[];
+  pose?: OnlinePose;
+  phase: "waiting" | "playing" | "finished";
+};
+type OnlineBattle = { code: string; seed: number; seat: 0 | 1; stream: EventSource;
+  pose?: OnlinePose; phase: OnlineSnapshot["phase"] };
+let online: OnlineBattle | undefined;
+let requestPending = false;
+const battleNote = element("battle-note");
+const createBattle = element<HTMLButtonElement>("create-battle");
+const joinBattle = element<HTMLFormElement>("join-battle");
+const battleCode = element<HTMLInputElement>("battle-code");
+
+async function enterBattle(code?: string) {
+  if (requestPending) return;
+  requestPending = true;
+  createBattle.disabled = true;
+  battleNote.textContent = "Connecting…";
+  try {
+    const response = await fetch(code ? `/api/battles/${code}/join` : "/api/battles", {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(weights),
+    });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error);
+    online?.stream.close();
+    pause();
+    turn = undefined;
+    cursor = 0;
+    frames = [{ duel: startDuel(result.seed) }];
+    const stream = new EventSource(`/api/battles/${result.code}/events`);
+    online = { ...result, stream, phase: "waiting" };
+    battleCode.value = result.code;
+    battleNote.textContent = `Invite code ${result.code}. Share it with the other player.`;
+    stream.onmessage = (event) => {
+      if (online?.stream !== stream) return;
+      const snapshot: OnlineSnapshot = JSON.parse(event.data);
+      const following = cursor === frames.length - 1;
+      for (const move of snapshot.moves.slice(frames.length - 1)) {
+        appendMove(move, move.player);
+      }
+      if (following) cursor = frames.length - 1;
+      online.pose = snapshot.pose;
+      online.phase = snapshot.phase;
+      battleNote.textContent = online.phase === "waiting"
+        ? `Invite code ${online.code}. Waiting for the other player.`
+        : `Battle ${online.code} · Seed ${snapshot.seed}`;
+      if (online.phase === "finished") stream.close();
+      render();
+    };
+    stream.onerror = () => {
+      if (online?.stream === stream) {
+        battleNote.textContent = stream.readyState === EventSource.CLOSED
+          ? "Battle connection closed. Start or join another battle."
+          : "Battle connection interrupted. Reconnecting…";
+      }
+    };
+    render();
+  } catch (error) {
+    battleNote.textContent = error instanceof Error ? error.message : "Could not connect to battle.";
+  } finally {
+    requestPending = false;
+    createBattle.disabled = false;
+  }
+}
+
+createBattle.onclick = () => void enterBattle();
+joinBattle.onsubmit = (event) => {
+  event.preventDefault();
+  void enterBattle(battleCode.value.trim().toUpperCase());
+};
+
+function appendMove(move: Move, player: 0 | 1) {
+  const duel = frames[frames.length - 1].duel;
+  const result = playTurn(duel, move.column, move.turns);
+  if (result.error) throw new Error(result.error);
+  const before = duel.players[player].board;
+  const added = [...result.duel.players[player].board].filter((cell) => !before.has(cell));
+  frames.push({ duel: result.duel, player, added, move });
+}
+
 function coachingState() {
   const duel = frames[cursor].duel;
   const next = frames[cursor + 1];
-  if (mode !== "paused" || duel.active !== 0 || next?.player !== 0 || !next.move) return;
+  if (online || mode !== "paused" || duel.active !== 0 || next?.player !== 0 || !next.move) return;
   const { board, turns } = duel.players[0];
   return { next, board, piece: duel.pieces[turns], move: {
     column: columnInput.valueAsNumber - 1, turns: Number(rotationInput.value),
@@ -98,6 +181,9 @@ function render() {
   const live = cursor === frames.length - 1;
   const coaching = coachingState();
   const preview = renderCoaching(coaching);
+  const labels = online ? ["Player 1", "Player 2"] : names;
+  element("coaching").hidden = Boolean(online);
+  const remotePose = live ? online?.pose : undefined;
   for (const [i, ctx] of contexts.entries()) {
     ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
     const player = frame.duel.players[i];
@@ -113,27 +199,35 @@ function render() {
         if (!player.board.has(cell)) drawCell(ctx, cell % WIDTH, Math.floor(cell / WIDTH), "#a9f1ad");
       }
     }
+    if (remotePose?.player === i) {
+      for (const [x, y] of orientation(remotePose.piece, remotePose.turns)) {
+        drawCell(ctx, remotePose.column + x, remotePose.row + y, remotePose.dropping ? "#fff" : colors[i]);
+      }
+    }
     if (live && turn?.player === i && turn.pose) {
       const { column, turns, row } = turn.pose;
       for (const [x, y] of orientation(turn.piece, turns)) {
         drawCell(ctx, column + x, row + y, turn.selected ? "#ffffff" : colors[i]);
       }
     }
+    element(`name-${i}`).textContent = online?.seat === i ? `${labels[i]} · Your bot` : labels[i];
     element(`score-${i}`).textContent = String(player.score);
     element(`bust-${i}`).textContent = player.bust ? `Bust. ${player.bust}` : "";
   }
   const { outcome, active } = frame.duel;
   const finished = outcome !== "playing";
   const moving = live && turn;
-  const message = finished
-    ? outcome === "draw" ? "Draw." : `${names[outcome]} wins.`
+  const message = online?.phase === "waiting" ? "Waiting for a second bot."
+    : remotePose ? `${labels[active]} is ${remotePose.dropping ? "dropping" : "testing placements for"} its ${remotePose.piece}.`
+    : finished
+    ? outcome === "draw" ? "Draw." : `${labels[outcome]} wins.`
     : !live ? `Turn ${cursor}. Reviewing a completed position.`
-    : moving ? `${names[active]} is ${moving.selected ? "dropping" : "testing placements for"} its ${moving.piece}.`
-    : `${names[active]} to move.`;
+    : moving ? `${labels[active]} is ${moving.selected ? "dropping" : "testing placements for"} its ${moving.piece}.`
+    : `${labels[active]} to move.`;
   if (status.textContent !== message) status.textContent = message;
   play.textContent = mode === "paused" ? "Play" : "Pause";
-  play.disabled = finished;
-  step.disabled = finished || mode !== "paused";
+  play.disabled = Boolean(online) || finished;
+  step.disabled = online ? live : finished || mode !== "paused";
   back.disabled = cursor === 0;
   timeline.max = String(frames.length - 1);
   timeline.value = String(cursor);
@@ -172,11 +266,7 @@ function advance() {
         turn.pose!.row--;
       } else {
         const { player, selected } = turn;
-        const result = playTurn(duel, selected.column, selected.turns);
-        if (result.error) throw new Error(result.error);
-        const before = duel.players[player].board;
-        const added = [...result.duel.players[player].board].filter((cell) => !before.has(cell));
-        frames.push({ duel: result.duel, player, added, move: selected });
+        appendMove(selected, player);
         cursor++;
         turn = undefined;
         delay = 420;
@@ -206,6 +296,11 @@ play.onclick = () => {
   }
 };
 step.onclick = () => {
+  if (online) {
+    if (cursor < frames.length - 1) cursor++;
+    render();
+    return;
+  }
   mode = "step";
   advance();
 };
@@ -221,6 +316,10 @@ timeline.oninput = () => {
 };
 element<HTMLFormElement>("match").onsubmit = (event) => {
   event.preventDefault();
+  if (requestPending) return;
+  online?.stream.close();
+  online = undefined;
+  battleNote.textContent = "";
   pause();
   turn = undefined;
   cursor = 0;

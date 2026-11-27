@@ -1,3 +1,4 @@
+import { createRooms } from "../online/rooms.ts";
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
 import { stripTypeScriptTypes } from "node:module";
@@ -12,8 +13,19 @@ const routes = new Map([
   ["/ai/baselines.ts", ["../ai/baselines.ts", "text/javascript"]],
 ]);
 
+const rooms = createRooms();
 const server = createServer(async (request, response) => {
   const path = request.url?.split("?")[0] ?? "";
+  if (path.startsWith("/api/")) {
+    try {
+      await rooms.handle(request, response, path);
+    } catch (error) {
+      console.error(error);
+      if (!response.headersSent) response.writeHead(500);
+      response.end();
+    }
+    return;
+  }
   const route = routes.get(path);
   if (request.method !== "GET" || !route) {
     response.writeHead(404).end();
@@ -30,4 +42,9 @@ const server = createServer(async (request, response) => {
   }
 });
 
-server.listen(4173, "127.0.0.1", () => console.log("Open http://127.0.0.1:4173"));
+const port = Number(process.env.PORT ?? 4173);
+const host = process.env.HOST ?? (process.env.PORT ? "0.0.0.0" : "127.0.0.1");
+server.listen(port, host, () => {
+  const address = server.address();
+  if (address && typeof address !== "string") console.log(`Arena listening on http://${host}:${address.port}`);
+});

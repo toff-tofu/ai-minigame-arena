@@ -26,6 +26,12 @@ Step through one of **Your bot**’s turns, then press **Back** once. In **Coach
 
 Your bot scores stable drops using height and support margin. Each demonstration takes a bounded gradient step that increases the demonstrated move’s softmax preference. The live bot still picks its highest-scoring drop. A lesson may raise a move’s preference without changing the top-ranked move. The browser saves your bot’s weights locally and uses them when you start a new match. A match in progress keeps the weights it started with, so its replay stays consistent. The terminal benchmarks still use their fixed policies.
 
+### Invite someone to a battle
+
+Start the arena with `npm start`. Open it in two browser windows. Use a private window for the second player if you want separate saved weights. Click **Create battle** in the first window, copy the displayed code into the second window, and click **Join battle**. The battle starts automatically. Use **Back**, **Step**, or the timeline to review finished moves. **New match** returns you to local play.
+
+Each browser submits its current two weights when its bot enters. The server keeps those weights for the battle and computes one move at a time. Both viewers receive the same placements and can reconnect while the room is available. Anyone with the code can take the open seat or watch through the room endpoint. Rooms expire after 30 minutes and are stored in memory. Restarting the server clears them.
+
 ## Run bot matches
 
 ```sh
@@ -126,8 +132,8 @@ When online play arrives, trusted match execution should determine results and t
 
 ## Server decision
 
-The local milestones can run on one machine with in-memory state or local files. Choose a server once we have measured match runtime, replay sizes, training runtime, and how often players want to queue. At that point, decide where to store accounts and replays, how to execute background matches and training, and whether the UI needs live updates. Separate skill progression by minigame so chess, block stacking, and other future games can each use the rules and learning approach that fits them.
+The local milestones can run on one machine with in-memory state or local files. The invite-code prototype can run as a single Node.js service. On a host that supplies `PORT`, start it with `npm start`. It binds to `0.0.0.0` when `PORT` is set and to localhost on port 4173 by default. Use one instance while rooms live in memory. PostgreSQL and accounts are future work for keeping models and results across restarts. At that point, decide where to store accounts and replays, how to execute background matches and training, and whether the UI needs live updates. Separate skill progression by minigame so chess, block stacking, and other future games can each use the rules and learning approach that fits them.
 
 ## Development status
 
-The terminal duel, seeded bot matches, live match viewer, and coaching demonstrations are playable. Full private duels and match-outcome training are planned.
+The terminal duel, seeded bot matches, live match viewer, coaching demonstrations, and invite-code battles are playable. Full private duels and match-outcome training are planned.

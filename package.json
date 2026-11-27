@@ -10,6 +10,7 @@
     "play": "node src/cli.ts",
     "test": "node --test tests/*.test.ts",
     "bots": "node src/bots-cli.ts",
-    "watch": "node src/ui/server.ts"
+    "watch": "node src/ui/server.ts",
+    "start": "node src/ui/server.ts"
   }
 }

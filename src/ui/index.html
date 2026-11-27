@@ -16,14 +16,23 @@
         <button>New match</button>
       </form>
     </header>
+    <section id="online" aria-labelledby="online-title">
+      <h2 id="online-title">Invite-code battle</h2>
+      <button id="create-battle" type="button">Create battle</button>
+      <form id="join-battle">
+        <label>Invite code <input id="battle-code" type="text" required maxlength="12" pattern="[A-Fa-f0-9]{12}" autocomplete="off"></label>
+        <button>Join battle</button>
+      </form>
+      <p id="battle-note" role="status"></p>
+    </section>
     <div id="boards">
       <section>
-        <h2>Your bot <output id="score-0">0</output></h2>
+        <h2><span id="name-0">Your bot</span> <output id="score-0">0</output></h2>
         <canvas id="board-0" width="288" height="640" aria-label="Your bot board"></canvas>
         <p id="bust-0"></p>
       </section>
       <section>
-        <h2>Stability bot <output id="score-1">0</output></h2>
+        <h2><span id="name-1">Stability bot</span> <output id="score-1">0</output></h2>
         <canvas id="board-1" width="288" height="640" aria-label="Stability bot board"></canvas>
         <p id="bust-1"></p>
       </section>
