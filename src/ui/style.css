@@ -83,3 +83,9 @@ dialog::backdrop { background: #080c16cf; }
 #history-list { padding: 0; margin: 12px 0; list-style: none; display: grid; gap: 7px; }
 #history-list button { width: 100%; text-align: left; }
 #replay-save-status { color: var(--muted); font-size: .88rem; }
+
+#test-lesson, #lesson-trial { margin-top: 10px; }
+#trial-results { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-top: 10px; }
+#trial-results article { background: #222e41; border-radius: 7px; padding: 8px; }
+#trial-results h3 { font-size: .9rem; margin: 0; }
+#trial-results ol { padding-left: 1.2rem; margin: 6px 0; font-size: .85rem; }

@@ -44,7 +44,7 @@ On Railway, add a PostgreSQL service to the existing project. In the Node servic
 
 Pick **Block Stacking**, **Tic-tac-toe**, **Four in a Row**, **Takeaway**, **Three Heaps**, or **Number Draft**. Use **Practice match** to watch the local bots. **Find opponent** pairs you with another waiting player who chose the same game. Cancel whenever you like, or use **Invite a friend** and send them the code. A friend’s code opens the game chosen by the host.
 
-Every game supplies its rules, legal moves, and a position evaluation. The five catalog games share one search policy, which considers each move and the opponent’s replies in turn. The same two trained weights also drive the stacking policy. Demonstration coaching is available for every game. Click **Coach my last move** and preview a legal alternative, then click **Teach move**. Training changes the shared weights for your next match.
+Every game supplies its rules, legal moves, and a position evaluation. The five catalog games share one search policy, which considers each move and the opponent’s replies in turn. The same two trained weights also drive the stacking policy. Demonstration coaching is available for every game. Click **Coach my last move** and preview a legal alternative, then click **Teach move**. Training changes the shared weights for your next match. Click **Test lesson** after teaching to compare up to six turns from the same position using the old and new weights against a fixed practice opponent.
 
 ## Enable Google sign-in
 

@@ -1,3 +1,4 @@
+import { tryLesson, type LessonPosition } from "../game/lesson-trial.ts";
 import type { Replay } from "../game/replays.ts";
 import { rankGameMoves, searchGame, teachGame } from "../ai/game-policy.ts";
 import { games, isGameId, type GameId, type Position } from "../game/catalog.ts";
@@ -204,6 +205,7 @@ function renderCoaching(state: ReturnType<typeof coachingState>) {
   if (teachingFrame !== state?.next) {
     teachingFrame = state?.next;
     feedback.textContent = "";
+    clearLesson();
   }
   const result = state && drop(state.board, state.piece, state.move.column, state.move.turns);
   teachButton.disabled = result?.kind !== "placed";
@@ -245,6 +247,7 @@ function renderCatalogCoaching(match: CatalogMatch) {
   if (coachedPosition !== state?.position) {
     coachedPosition = state?.position;
     feedback.textContent = "";
+    clearLesson();
     const legal = state ? games[match.id].legal(state.position) : [];
     coachMove.replaceChildren(...legal.map((move) => new Option(moveLabel(match.id, move), String(move))));
     const otherMove = legal.find((move) => move !== state?.previous);
@@ -519,11 +522,58 @@ coachLast.onclick = () => {
 
 function previewChange() {
   feedback.textContent = "";
+  clearLesson();
   render();
 }
 columnInput.oninput = previewChange;
 rotationInput.onchange = previewChange;
 coachMove.onchange = previewChange;
+
+type LessonTrial = { position: LessonPosition; before: Weights; after: Weights; seat: 0 | 1 };
+let latestLesson: LessonTrial | undefined;
+const testLesson = element<HTMLButtonElement>("test-lesson");
+const trialPanel = element("lesson-trial");
+
+function clearLesson() {
+  latestLesson = undefined;
+  testLesson.hidden = true;
+  trialPanel.hidden = true;
+}
+
+function offerLessonTest(position: LessonPosition, after: Weights) {
+  latestLesson = { position, before: weights, after, seat: currentSeat() };
+  trialPanel.hidden = true;
+  testLesson.hidden = false;
+}
+
+testLesson.onclick = () => {
+  if (!latestLesson) return;
+  const { position, before, after, seat } = latestLesson;
+  const trials = [tryLesson(position, seat, before), tryLesson(position, seat, after)];
+  const unchanged = trials[0].moves.every((move, index) => move === trials[1].moves[index]) &&
+    trials[0].moves.length === trials[1].moves.length;
+  const panels = trials.map((trial, index) => {
+    const panel = document.createElement("article");
+    const title = document.createElement("h3");
+    title.textContent = index ? "After lesson" : "Before lesson";
+    const moves = document.createElement("ol");
+    for (const move of trial.moves) {
+      const item = document.createElement("li");
+      item.textContent = move;
+      moves.append(item);
+    }
+    const result = document.createElement("p");
+    const outcome = trial.outcome === "playing" ? "Match in progress"
+      : trial.outcome === "draw" ? "Draw" : trial.outcome === seat ? "Your bot wins" : "Practice bot wins";
+    result.textContent = trial.scores ? `${outcome} · Heights ${trial.scores.join("–")}` : outcome;
+    panel.append(title, moves, result);
+    return panel;
+  });
+  element("trial-summary").textContent = unchanged ? "Both versions chose the same moves in this trial."
+    : "The lesson changed at least one move in this trial.";
+  element("trial-results").replaceChildren(...panels);
+  trialPanel.hidden = false;
+};
 
 function saveLearnedWeights(updated: Weights) {
   weights = updated;
@@ -549,6 +599,7 @@ function teachCatalog(match: CatalogMatch) {
   }
   const after = rankGameMoves(match.id, state.position, updated);
   const taught = after.find((option) => option.move === move)!;
+  offerLessonTest({ game: match.id, state: state.position }, updated);
   const persistence = saveLearnedWeights(updated);
   feedback.textContent = `Your move ranked ${target.rank} → ${taught.rank} of ${before.length}. ` +
     `Its preference rose from ${(100 * target.preference).toPrecision(3)}% to ${(100 * taught.preference).toPrecision(3)}%. ` +
@@ -572,6 +623,7 @@ teachButton.onclick = () => {
   const previous = state.next.move!;
   const oldRank = before.find((move) => sameMove(move, previous))?.rank;
   const newRank = after.find((move) => sameMove(move, previous))?.rank;
+  offerLessonTest({ game: "stacking", state: frames[cursor].duel }, updated);
   const persistence = saveLearnedWeights(updated);
   feedback.textContent = `Your move ranked ${target.rank} → ${taught.rank} of ${moves.length}. ` +
     `Its preference weight rose from ${(100 * target.preference).toPrecision(3)}% to ${(100 * taught.preference).toPrecision(3)}%. ` +
@@ -631,6 +683,7 @@ element<HTMLFormElement>("load-bot").onsubmit = (event) => {
     }
     recoveryCode.value = "";
     feedback.textContent = "";
+    clearLesson();
   });
 };
 
@@ -662,6 +715,7 @@ let saveAttempted = false;
 let replayGeneration = 0;
 
 function resetReplaySave() {
+  clearLesson();
   saveAttempted = false;
   replayGeneration++;
   archivedSeat = undefined;
