@@ -1,4 +1,5 @@
-import { searchGame } from "../ai/game-policy.ts";
+import type { Replay } from "../game/replays.ts";
+import { rankGameMoves, searchGame, teachGame } from "../ai/game-policy.ts";
 import { games, isGameId, type GameId, type Position } from "../game/catalog.ts";
 import { isWeights, placements, rankMoves, sameMove, starter, teach, type Weights } from "../ai/coaching.ts";
 import { searchMoves, type Move } from "../ai/baselines.ts";
@@ -33,6 +34,9 @@ type Turn = {
 
 let frames: Frame[] = [{ duel: startDuel(seedInput.valueAsNumber) }];
 let cursor = 0;
+let practiceSeed = seedInput.valueAsNumber;
+let archivedSeat: 0 | 1 | undefined;
+const currentSeat = () => online?.seat ?? archivedSeat ?? 0;
 let turn: Turn | undefined;
 let mode: "paused" | "play" | "step" = "paused";
 let timer: number | undefined;
@@ -108,6 +112,7 @@ async function enterBattle(code?: string, random = false) {
     const result = await response.json();
     if (!response.ok) throw new Error(result.error);
     online?.stream.close();
+    resetReplaySave();
     pause();
     turn = undefined;
     cursor = 0;
@@ -179,7 +184,7 @@ function appendMove(move: Move, player: 0 | 1) {
 function coachingState() {
   const duel = frames[cursor].duel;
   const next = frames[cursor + 1];
-  const seat = online?.seat ?? 0;
+  const seat = currentSeat();
   if (mode !== "paused" || duel.active !== seat || next?.player !== seat || !next.move) return;
   const { board, turns } = duel.players[seat];
   return { next, seat, board, piece: duel.pieces[turns], move: {
@@ -188,7 +193,7 @@ function coachingState() {
 }
 
 function renderCoaching(state: ReturnType<typeof coachingState>) {
-  coachLast.disabled = !frames.some((frame) => frame.player === (online?.seat ?? 0));
+  coachLast.disabled = !frames.some((frame) => frame.player === currentSeat());
   columnInput.disabled = !state;
   rotationInput.disabled = !state;
   element("coach-hint").textContent = state
@@ -218,13 +223,49 @@ function drawCell(ctx: CanvasRenderingContext2D, x: number, y: number, color: st
     cellSize - 2 * inset, cellSize - 2 * inset);
 }
 
+const coachMove = element<HTMLSelectElement>("coach-move");
+let coachedPosition: Position | undefined;
+
+function moveLabel(game: GameId, move: number) {
+  return games[game].preview?.(move).label.replace(/^Testing taking /, "Take ") ?? `Tile ${move + 1}`;
+}
+
+function catalogCoaching(match: CatalogMatch) {
+  const position = match.positions[cursor];
+  const previous = match.moves[cursor];
+  const seat = currentSeat();
+  if (mode !== "paused" || previous === undefined || position.active !== seat) return;
+  return { position, previous };
+}
+
+function renderCatalogCoaching(match: CatalogMatch) {
+  const seat = currentSeat();
+  coachLast.disabled = !match.moves.some((_, index) => match.positions[index].active === seat);
+  const state = catalogCoaching(match);
+  if (coachedPosition !== state?.position) {
+    coachedPosition = state?.position;
+    feedback.textContent = "";
+    const legal = state ? games[match.id].legal(state.position) : [];
+    coachMove.replaceChildren(...legal.map((move) => new Option(moveLabel(match.id, move), String(move))));
+    const otherMove = legal.find((move) => move !== state?.previous);
+    if (otherMove !== undefined) coachMove.value = String(otherMove);
+  }
+  coachMove.disabled = !state;
+  teachButton.disabled = !state || !coachMove.value;
+  element("coach-hint").textContent = state
+    ? "Preview a legal move. A lesson applies to your next match."
+    : "Choose Coach my last move after your bot plays.";
+  element("coach-preview").textContent = state ? `Bot played ${moveLabel(match.id, state.previous)}.` : "";
+  if (state && coachMove.value) return games[match.id].apply(state.position, Number(coachMove.value));
+}
+
 function renderCatalog(match: CatalogMatch) {
   const rules = games[match.id];
   const position = match.positions[cursor];
   const last = match.moves.length;
   const live = cursor === last;
-  const labels = online ? ["Player 1", "Player 2"] : ["Your bot", "Practice bot"];
-  if (online) labels[online.seat] += " · Your bot";
+  const labels = online || archivedSeat !== undefined ? ["Player 1", "Player 2"] : ["Your bot", "Practice bot"];
+  if (online || archivedSeat !== undefined) labels[currentSeat()] += " · Your bot";
   element("catalog-title").textContent = rules.title;
   element("catalog-rules").textContent = rules.instructions;
   const grid = element("catalog-grid");
@@ -232,9 +273,12 @@ function renderCatalog(match: CatalogMatch) {
   const candidate = live ? match.candidate : undefined;
   const preview = (move: number) => rules.preview?.(move) ?? { cell: move, label: `Testing tile ${move + 1}` };
   const lastMove = match.moves[cursor - 1];
+  const lesson = renderCatalogCoaching(match);
   grid.replaceChildren(...position.cells.map((value, i) => {
     const cell = document.createElement("span");
-    cell.textContent = rules.label(value);
+    const proposed = lesson?.cells[i];
+    cell.textContent = rules.label(proposed ?? value);
+    if (proposed !== undefined && proposed !== value) cell.dataset.lesson = "";
     if (candidate !== undefined && i === preview(candidate).cell) cell.dataset.candidate = "";
     if (lastMove !== undefined && i === preview(lastMove).cell) cell.dataset.last = "";
     return cell;
@@ -284,15 +328,19 @@ function advanceCatalog(match: CatalogMatch) {
 }
 
 function render() {
-  element("coaching").hidden = Boolean(catalog);
+  maybeSaveReplay();
+  element("catalog-choice").hidden = !catalog;
+  columnInput.closest("label")!.hidden = Boolean(catalog);
+  rotationInput.closest("label")!.hidden = Boolean(catalog);
   element("boards").hidden = Boolean(catalog);
   element("catalog-board").hidden = !catalog;
   if (catalog) return renderCatalog(catalog);
+  coachedPosition = undefined;
   const frame = frames[cursor];
   const live = cursor === frames.length - 1;
   const coaching = coachingState();
   const preview = renderCoaching(coaching);
-  const labels = online ? ["Player 1", "Player 2"] : names;
+  const labels = online || archivedSeat !== undefined ? ["Player 1", "Player 2"] : names;
   const remotePose = live ? online?.pose : undefined;
   for (const [i, ctx] of contexts.entries()) {
     ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
@@ -320,7 +368,7 @@ function render() {
         drawCell(ctx, column + x, row + y, turn.selected ? "#ffffff" : colors[i]);
       }
     }
-    element(`name-${i}`).textContent = online?.seat === i ? `${labels[i]} · Your bot` : labels[i];
+    element(`name-${i}`).textContent = (online || archivedSeat !== undefined) && currentSeat() === i ? `${labels[i]} · Your bot` : labels[i];
     element(`score-${i}`).textContent = String(player.score);
     element(`bust-${i}`).textContent = player.bust ? `Bust. ${player.bust}` : "";
   }
@@ -430,17 +478,28 @@ element<HTMLFormElement>("match").onsubmit = (event) => {
   if (requestPending) return;
   online?.stream.close();
   online = undefined;
+  resetReplaySave();
   battleNote.textContent = "";
   pause();
   turn = undefined;
   cursor = 0;
   matchWeights = weights;
-  frames = [{ duel: startDuel(seedInput.valueAsNumber) }];
-  catalog = isGameId(gameSelect.value) ? startCatalog(gameSelect.value, seedInput.valueAsNumber) : undefined;
+  practiceSeed = seedInput.valueAsNumber;
+  frames = [{ duel: startDuel(practiceSeed) }];
+  catalog = isGameId(gameSelect.value) ? startCatalog(gameSelect.value, practiceSeed) : undefined;
   render();
 };
 coachLast.onclick = () => {
-  const seat = online?.seat ?? 0;
+  const seat = currentSeat();
+  if (catalog) {
+    const match = catalog;
+    const index = match.moves.findLastIndex((_, turn) => match.positions[turn].active === seat);
+    if (index < 0) return;
+    pause();
+    cursor = index;
+    render();
+    return;
+  }
   const index = frames.findLastIndex((frame) => frame.player === seat);
   if (index <= 0) return;
   pause();
@@ -464,7 +523,39 @@ function previewChange() {
 }
 columnInput.oninput = previewChange;
 rotationInput.onchange = previewChange;
+coachMove.onchange = previewChange;
+
+function saveLearnedWeights(updated: Weights) {
+  weights = updated;
+  try {
+    localStorage.setItem(storageKey, JSON.stringify(weights));
+    return "Saved in this browser.";
+  } catch {
+    return "Saved for this page session.";
+  }
+}
+
+function teachCatalog(match: CatalogMatch) {
+  const state = catalogCoaching(match);
+  if (!state || !coachMove.value) return;
+  const move = Number(coachMove.value);
+  const before = rankGameMoves(match.id, state.position, weights);
+  const target = before.find((option) => option.move === move);
+  if (!target) return;
+  const updated = teachGame(match.id, state.position, move, weights);
+  if (updated === weights) {
+    feedback.textContent = "This move couldn’t gain preference here. Try another position.";
+    return;
+  }
+  const after = rankGameMoves(match.id, state.position, updated);
+  const taught = after.find((option) => option.move === move)!;
+  const persistence = saveLearnedWeights(updated);
+  feedback.textContent = `Your move ranked ${target.rank} → ${taught.rank} of ${before.length}. ` +
+    `Its preference rose from ${(100 * target.preference).toPrecision(3)}% to ${(100 * taught.preference).toPrecision(3)}%. ` +
+    `The updated bot would choose ${moveLabel(match.id, after[0].move)}. ${persistence}`;
+}
 teachButton.onclick = () => {
+  if (catalog) return teachCatalog(catalog);
   const state = coachingState();
   if (!state) return;
   const moves = placements(state.board, state.piece);
@@ -476,18 +567,12 @@ teachButton.onclick = () => {
     feedback.textContent = "This example can't raise the preference further. Try a different placement or position.";
     return;
   }
-  weights = updated;
-  const after = rankMoves(moves, weights);
+  const after = rankMoves(moves, updated);
   const taught = after.find((move) => sameMove(move, state.move))!;
   const previous = state.next.move!;
   const oldRank = before.find((move) => sameMove(move, previous))?.rank;
   const newRank = after.find((move) => sameMove(move, previous))?.rank;
-  let persistence = "Saved in this browser.";
-  try {
-    localStorage.setItem(storageKey, JSON.stringify(weights));
-  } catch {
-    persistence = "Saved for this page session.";
-  }
+  const persistence = saveLearnedWeights(updated);
   feedback.textContent = `Your move ranked ${target.rank} → ${taught.rank} of ${moves.length}. ` +
     `Its preference weight rose from ${(100 * target.preference).toPrecision(3)}% to ${(100 * taught.preference).toPrecision(3)}%. ` +
     (oldRank && newRank ? `The bot’s original move ranked ${oldRank} → ${newRank}. ` : "") +
@@ -565,12 +650,135 @@ async function accountRequest(method = "GET", path = "/api/account", body?: unkn
   return data;
 }
 
+type HistoryItem = { replay: Replay; outcome: "draw" | 0 | 1; saved_at: string };
+const historyDialog = element<HTMLDialogElement>("match-history");
+const historyList = element("history-list");
+const historyStatus = element("history-status");
+const historyMore = element<HTMLButtonElement>("history-more");
+const replayStatus = element("replay-save-status");
+let historyOffset = 0;
+let loadingHistory = false;
+let saveAttempted = false;
+let replayGeneration = 0;
+
+function resetReplaySave() {
+  saveAttempted = false;
+  replayGeneration++;
+  archivedSeat = undefined;
+  replayStatus.hidden = true;
+}
+
+function completedReplay(): Replay | undefined {
+  const outcome = catalog ? catalog.positions.at(-1)!.outcome : frames.at(-1)!.duel.outcome;
+  if (outcome === "playing") return;
+  const metadata = { id: crypto.randomUUID(), seed: practiceSeed, seat: 0 as const, mode: "practice" as const };
+  if (catalog) {
+    return { ...metadata, game: catalog.id, moves: [...catalog.moves] };
+  }
+  const moves = frames.slice(1).map(({ move, player }) => ({ ...move!, player: player! }));
+  return { ...metadata, game: "stacking", moves };
+}
+
+function maybeSaveReplay() {
+  if (online || saveAttempted || archivedSeat !== undefined || accountVersion === undefined) return;
+  const replay = completedReplay();
+  if (!replay) return;
+  saveAttempted = true;
+  const generation = replayGeneration;
+  const save = async () => {
+    try {
+      await accountRequest("POST", "/api/account/replays", replay);
+      if (generation !== replayGeneration) return;
+      replayStatus.textContent = "Saved to match history.";
+      replayStatus.hidden = false;
+    } catch {
+      if (generation !== replayGeneration) return;
+      const retry = document.createElement("button");
+      retry.textContent = "Retry replay save";
+      retry.onclick = () => {
+        replayStatus.hidden = true;
+        void save();
+      };
+      replayStatus.replaceChildren("Couldn’t save this replay. ", retry);
+      replayStatus.hidden = false;
+    }
+  };
+  void save();
+}
+
+function openReplay(replay: Replay) {
+  pause();
+  matchSearch?.abort();
+  online?.stream.close();
+  online = undefined;
+  turn = undefined;
+  resetReplaySave();
+  archivedSeat = replay.seat;
+  gameSelect.value = replay.game;
+  frames = [{ duel: startDuel(replay.seed) }];
+  if (replay.game === "stacking") {
+    catalog = undefined;
+    for (const move of replay.moves) appendMove(move, move.player);
+    cursor = frames.length - 1;
+  } else {
+    catalog = startCatalog(replay.game, replay.seed);
+    for (const move of replay.moves) appendCatalogMove(catalog, move);
+    cursor = catalog.moves.length;
+  }
+  battleNote.textContent = "Watching a saved replay.";
+  historyDialog.close();
+  render();
+}
+
+async function showHistory(reset: boolean) {
+  if (loadingHistory) return;
+  loadingHistory = true;
+  if (reset) {
+    historyOffset = 0;
+    historyList.replaceChildren();
+  }
+  historyMore.disabled = true;
+  historyStatus.textContent = "Loading…";
+  try {
+    const data = await accountRequest("GET", `/api/account/replays?offset=${historyOffset}`);
+    const items: HistoryItem[] = data.items;
+    for (const item of items) {
+      const listItem = document.createElement("li");
+      const button = document.createElement("button");
+      const { replay, outcome } = item;
+      const title = replay.game === "stacking" ? "Block Stacking" : games[replay.game].title;
+      const result = outcome === "draw" ? "Draw" : outcome === replay.seat ? "Win" : "Loss";
+      const date = new Date(item.saved_at).toLocaleDateString();
+      button.textContent = `${title} · ${result} · ${replay.mode === "online" ? "Online" : "Practice"} · ${date}`;
+      button.onclick = () => openReplay(replay);
+      listItem.append(button);
+      historyList.append(listItem);
+    }
+    historyOffset += items.length;
+    historyMore.hidden = !data.more;
+    historyStatus.textContent = historyOffset === 0 ? "Finish a match while signed in to see it here." : "";
+  } catch {
+    historyStatus.textContent = "Couldn’t load match history. Close it and try again.";
+  } finally {
+    loadingHistory = false;
+    historyMore.disabled = false;
+  }
+}
+
+element("history-open").onclick = () => {
+  if (requestPending || historyDialog.open) return;
+  historyDialog.showModal();
+  void showHistory(true);
+};
+historyMore.onclick = () => void showHistory(false);
+
 async function loadAccount(restore: boolean) {
   const data = await accountRequest();
   accountPanel.hidden = !data.enabled;
   accountActions.hidden = !data.signedIn;
   signIn.hidden = Boolean(data.signedIn);
   accountVersion = data.version;
+  maybeSaveReplay();
   if (restore && isWeights(data.weights)) {
     weights = data.weights;
     try { localStorage.setItem(storageKey, JSON.stringify(weights)); } catch {}

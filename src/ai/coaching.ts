@@ -36,8 +36,8 @@ export function sameMove(left: Move, right: Move): boolean {
   return left.column === right.column && left.turns === right.turns;
 }
 
-export function rankMoves(moves: readonly Placement[], weights: Weights) {
-  const ranked = moves.map((move) => ({ ...move, score: score(move.values, weights) }))
+export function rankCandidates<T extends { values: Weights; offset?: number }>(moves: readonly T[], weights: Weights) {
+  const ranked = moves.map((move) => ({ ...move, score: score(move.values, weights) + (move.offset ?? 0) }))
     .sort((a, b) => b.score - a.score);
   const total = ranked.reduce((sum, move) => sum + Math.exp(move.score - ranked[0].score), 0);
   return ranked.map((move, index) => ({
@@ -45,16 +45,24 @@ export function rankMoves(moves: readonly Placement[], weights: Weights) {
   }));
 }
 
+export const rankMoves = (moves: readonly Placement[], weights: Weights) => rankCandidates(moves, weights);
+
+export function preferenceStep<T extends { values: Weights; preference: number }>(
+  ranked: readonly T[], target: T, weights: Weights,
+): Weights {
+  const expected = ([0, 1] as const).map((i) =>
+    ranked.reduce((sum, move) => sum + move.preference * move.values[i], 0));
+  return [
+    Math.max(-16, Math.min(16, weights[0] + 2 * (target.values[0] - expected[0]))),
+    Math.max(-16, Math.min(16, weights[1] + 2 * (target.values[1] - expected[1]))),
+  ];
+}
+
 export function teach(moves: readonly Placement[], example: Move, weights: Weights): Weights {
   const ranked = rankMoves(moves, weights);
   const target = ranked.find((move) => sameMove(move, example));
   if (!target) return weights;
-  const expected = ([0, 1] as const).map((i) =>
-    ranked.reduce((sum, move) => sum + move.preference * move.values[i], 0));
-  const candidate: Weights = [
-    Math.max(-16, Math.min(16, weights[0] + 2 * (target.values[0] - expected[0]))),
-    Math.max(-16, Math.min(16, weights[1] + 2 * (target.values[1] - expected[1]))),
-  ];
+  const candidate = preferenceStep(ranked, target, weights);
   const updated = rankMoves(moves, candidate).find((move) => sameMove(move, example));
   return updated && updated.preference > target.preference + 1e-10 ? candidate : weights;
 }

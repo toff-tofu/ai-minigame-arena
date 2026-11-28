@@ -17,15 +17,15 @@ const routes = new Map([
   ["/ai/baselines.ts", ["../ai/baselines.ts", "text/javascript"]],
 ]);
 
-const rooms = createRooms();
 const saves = process.env.DATABASE_URL ? await connectBotSaves(process.env.DATABASE_URL) : undefined;
 const accounts = await connectAccounts();
+const rooms = createRooms(undefined, accounts?.saveReplay);
 const server = createServer(async (request, response) => {
   const path = request.url?.split("?")[0] ?? "";
   if (path.startsWith("/api/") || path.startsWith("/auth/")) {
     try {
       if (path.startsWith("/api/account") || path.startsWith("/auth/")) {
-        if (accounts) await accounts(request, response, path);
+        if (accounts) await accounts.handle(request, response, path);
         else {
           response.writeHead(path === "/api/account" && request.method === "GET" ? 200 : 503,
             { "Content-Type": "application/json", "Cache-Control": "no-store" });
@@ -34,7 +34,8 @@ const server = createServer(async (request, response) => {
       } else if (path.startsWith("/api/bot-saves")) {
         await handleBotSave(request, response, path, saves);
       } else {
-        await rooms.handle(request, response, path);
+        const owner = request.method === "POST" ? await accounts?.owner(request) : undefined;
+        await rooms.handle(request, response, path, owner);
       }
     } catch (error) {
       console.error(error);

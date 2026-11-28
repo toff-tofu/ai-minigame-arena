@@ -1,3 +1,4 @@
+import { validateReplay, type Replay } from "../game/replays.ts";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import pg from "pg";
@@ -40,6 +41,15 @@ export async function connectAccounts() {
       google_sub text NOT NULL REFERENCES arena_accounts(google_sub),
       expires_at timestamptz NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS arena_replays (
+      google_sub text NOT NULL REFERENCES arena_accounts(google_sub),
+      id text NOT NULL,
+      replay jsonb NOT NULL,
+      outcome jsonb NOT NULL,
+      saved_at timestamptz NOT NULL DEFAULT now(),
+      PRIMARY KEY (google_sub, id)
+    );
+    CREATE INDEX IF NOT EXISTS arena_replays_recent ON arena_replays (google_sub, saved_at DESC, id DESC);
   `);
   function setCookie(name: string, value: string, maxAge: number) {
     return `${name}=${value}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secure}`;
@@ -58,7 +68,14 @@ export async function connectAccounts() {
     return rows[0];
   }
 
-  return async (request: IncomingMessage, response: ServerResponse, path: string) => {
+  async function saveReplay(owner: string, replay: Replay, outcome: "draw" | 0 | 1) {
+    await pool.query(
+      "INSERT INTO arena_replays (google_sub, id, replay, outcome) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING",
+      [owner, replay.id, JSON.stringify(replay), JSON.stringify(outcome)],
+    );
+  }
+
+  async function handle(request: IncomingMessage, response: ServerResponse, path: string) {
     if (path === "/auth/google" && request.method === "GET") {
       const state = token();
       const verifier = token();
@@ -109,6 +126,38 @@ export async function connectAccounts() {
       const row = await account(request);
       return json(response, 200, { enabled: true, signedIn: Boolean(row), weights: row?.weights, version: row?.version });
     }
+    if (path === "/api/account/replays" && request.method === "GET") {
+      const row = await account(request);
+      if (!row) return json(response, 401, { error: "Sign in to open match history." });
+      const rawOffset = new URL(request.url!, origin).searchParams.get("offset") ?? "0";
+      const offset = Number(rawOffset);
+      if (!Number.isSafeInteger(offset) || offset < 0) return json(response, 400, { error: "Invalid history page." });
+      const { rows } = await pool.query(
+        "SELECT id, replay, outcome, saved_at FROM arena_replays WHERE google_sub = $1 ORDER BY saved_at DESC, id DESC LIMIT 21 OFFSET $2",
+        [row.google_sub, offset],
+      );
+      return json(response, 200, { items: rows.slice(0, 20), more: rows.length > 20 });
+    }
+
+    if (path === "/api/account/replays" && request.method === "POST" && request.headers.origin === origin.origin) {
+      const row = await account(request);
+      if (!row) return json(response, 401, { error: "Sign in to save a replay." });
+      let raw = "";
+      for await (const chunk of request.iterator({ destroyOnReturn: false })) {
+        raw += chunk.toString();
+        if (raw.length > 4096) return json(response, 400, { error: "Invalid replay." });
+      }
+      let payload;
+      try { payload = JSON.parse(raw); } catch { return json(response, 400, { error: "Invalid replay." }); }
+      const result = validateReplay(payload);
+      if (!result) return json(response, 400, { error: "Only valid, completed games can be saved." });
+      if (result.replay.mode !== "practice" || result.replay.seat !== 0) {
+        return json(response, 400, { error: "Online results are saved by the battle server." });
+      }
+      await saveReplay(row.google_sub, result.replay, result.outcome);
+      return json(response, 200, { saved: true });
+    }
+
     if (path === "/api/account/logout" && request.method === "POST" && request.headers.origin === origin.origin) {
       const session = cookie(request, "arena_session");
       if (session && secretPattern.test(session)) {
@@ -136,5 +185,8 @@ export async function connectAccounts() {
       return json(response, 200, { version: result.rows[0].version });
     }
     return json(response, 404, { error: "Unknown account action." });
-  };
+  }
+  return { handle, saveReplay, async owner(request: IncomingMessage): Promise<string | undefined> {
+    if (request.headers.origin === origin.origin) return (await account(request))?.google_sub;
+  } };
 }

@@ -72,3 +72,14 @@ summary { cursor: pointer; }
 }
 #catalog-grid span[data-candidate] { border-color: #ffbc69; }
 #catalog-grid span[data-last] { border-color: #65b6ff; }
+
+#catalog-grid span[data-lesson] { border-color: #a9f1ad; }
+
+dialog { width: min(560px, calc(100% - 24px)); max-height: 80vh; background: var(--panel); color: inherit;
+  border: 1px solid var(--border); border-radius: 12px; padding: 18px; }
+dialog::backdrop { background: #080c16cf; }
+.history-heading { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.history-heading h2 { margin: 0; }
+#history-list { padding: 0; margin: 12px 0; list-style: none; display: grid; gap: 7px; }
+#history-list button { width: 100%; text-align: left; }
+#replay-save-status { color: var(--muted); font-size: .88rem; }

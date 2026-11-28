@@ -41,6 +41,7 @@
           <option value="0">0°</option><option value="1">90°</option>
           <option value="2">180°</option><option value="3">270°</option>
         </select></label>
+        <label id="catalog-choice" hidden>Move <select id="coach-move"></select></label>
         <button id="teach" disabled>Teach move</button>
       </div>
       <p id="coach-preview"></p>
@@ -52,6 +53,7 @@
       <div id="account-actions" class="match-actions" hidden>
         <button id="save-account" type="button">Save training</button>
         <button id="load-account" type="button">Load training</button>
+        <button id="history-open" type="button">Match history</button>
         <button id="sign-out" type="button">Sign out</button>
       </div>
       <p id="account-status" role="status"></p>
@@ -89,6 +91,7 @@
       </section>
     </div>
     <p id="status" role="status"></p>
+    <p id="replay-save-status" role="status" hidden></p>
     <div id="controls">
       <button id="play">Play</button>
       <button id="back">Back</button>
@@ -98,6 +101,15 @@
     </div>
     </div>
     </div>
+    <dialog id="match-history" aria-labelledby="history-title">
+      <div class="history-heading">
+        <h2 id="history-title">Match history</h2>
+        <form method="dialog"><button>Close</button></form>
+      </div>
+      <p id="history-status" role="status"></p>
+      <ol id="history-list"></ol>
+      <button id="history-more" type="button" hidden>Load more</button>
+    </dialog>
   </main>
 </body>
 </html>
