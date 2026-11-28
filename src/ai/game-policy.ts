@@ -1,4 +1,4 @@
-import { preferenceStep, rankCandidates, score, type Weights } from "./coaching.ts";
+import { exploration, preferenceStep, rankCandidates, score, type Weights } from "./coaching.ts";
 import { games, type GameId, type Position, type Seat } from "../game/catalog.ts";
 
 type Evaluation = { values: Weights; offset: number };
@@ -41,10 +41,16 @@ export function teachGame(game: GameId, position: Position, move: number, weight
   return after && after.preference > target.preference + 1e-10 ? updated : weights;
 }
 
-export function* searchGame(game: GameId, position: Position, weights: Weights): Generator<number, number> {
+export function* searchGame(game: GameId, position: Position, weights: Weights, seed = 0, turn = 0): Generator<number, number> {
+  const legal = games[game].legal(position);
+  const sample = exploration(weights, seed, turn);
+  if (sample !== undefined && legal.length) {
+    yield* legal;
+    return legal[Math.floor(sample * legal.length)];
+  }
   let best = -1;
   let bestValue = -Infinity;
-  for (const move of games[game].legal(position)) {
+  for (const move of legal) {
     const rating = value(evaluateMove(game, position, move, weights), weights);
     if (rating > bestValue) {
       best = move;

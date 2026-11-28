@@ -151,7 +151,7 @@ export async function connectAccounts() {
       try { payload = JSON.parse(raw); } catch { return json(response, 400, { error: "Invalid replay." }); }
       const result = validateReplay(payload);
       if (!result) return json(response, 400, { error: "Only valid, completed games can be saved." });
-      if (result.replay.mode !== "practice" || result.replay.seat !== 0) {
+      if (result.replay.mode === "online" || result.replay.seat !== 0) {
         return json(response, 400, { error: "Online results are saved by the battle server." });
       }
       await saveReplay(row.google_sub, result.replay, result.outcome);

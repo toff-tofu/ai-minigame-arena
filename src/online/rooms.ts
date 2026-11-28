@@ -86,7 +86,7 @@ function runTurn(room: Room, delay: number) {
   const player = room.duel.active;
   const { board, turns } = room.duel.players[player];
   const piece = room.duel.pieces[turns];
-  const search = searchMoves(board, piece, room.models[player]!);
+  const search = searchMoves(board, piece, room.models[player]!, room.seed, room.moves.length);
   function schedule(action: () => void, ticks = 1) {
     room.timer = setTimeout(action, delay * ticks);
   }
@@ -122,7 +122,7 @@ function runTurn(room: Room, delay: number) {
 function runCatalogTurn(room: Room, delay: number) {
   const catalog = room.catalog!;
   const { position, id } = catalog;
-  const search = searchGame(id, position, room.models[position.active]!);
+  const search = searchGame(id, position, room.models[position.active]!, room.seed, catalog.moves.length);
   function examine() {
     const next = search.next();
     if (!next.done) {

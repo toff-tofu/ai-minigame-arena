@@ -2,11 +2,21 @@ import { HEIGHT, drop, height, WIDTH, type Board, type Piece } from "../game/sta
 import type { Move } from "./baselines.ts";
 
 export type Weights = readonly [height: number, support: number];
-export const starter: Weights = [8, 1];
+export const starter: Weights = [0, 0];
 
 export function isWeights(value: unknown): value is Weights {
   return Array.isArray(value) && value.length === 2 &&
     value.every((weight) => typeof weight === "number" && Number.isFinite(weight) && Math.abs(weight) <= 16);
+}
+
+export function exploration(weights: Weights, seed: number, turn: number): number | undefined {
+  let state = (seed ^ Math.imul(turn + 1, 0x9e3779b9)) >>> 0;
+  const random = () => {
+    state = Math.imul(state ^ (state >>> 16), 0x45d9f3b);
+    return ((state ^ (state >>> 16)) >>> 0) / 2 ** 32;
+  };
+  const chance = Math.max(0, 1 - (Math.abs(weights[0]) + Math.abs(weights[1])) / 2);
+  return random() < chance ? random() : undefined;
 }
 
 export function features(board: Board, margin: number): Weights {

@@ -7,14 +7,14 @@ export type Replay = {
   id: string;
   seed: number;
   seat: Seat;
-  mode: "practice" | "online";
+  mode: "practice" | "training" | "online";
 } & ({ game: "stacking"; moves: (Move & { player: Seat })[] } | { game: GameId; moves: number[] });
 
 export function validateReplay(value: unknown): { replay: Replay; outcome: Exclude<Outcome, "playing"> } | undefined {
   if (!value || typeof value !== "object") return;
   const { id, seed, seat, mode, game, moves } = value as Partial<Replay>;
   if (typeof id !== "string" || !/^[a-f0-9-]{36}$/.test(id) || typeof seed !== "number" || !Number.isInteger(seed) || seed < 0 || seed > 0xffffffff ||
-      (seat !== 0 && seat !== 1) || (mode !== "practice" && mode !== "online") ||
+      (seat !== 0 && seat !== 1) || (mode !== "practice" && mode !== "training" && mode !== "online") ||
       !Array.isArray(moves) || moves.length === 0 || moves.length > 100) return;
 
   if (game === "stacking") {

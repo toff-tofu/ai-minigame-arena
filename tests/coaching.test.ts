@@ -7,8 +7,9 @@ test("a demonstration raises the taught drop's preference and the live bot uses 
   const board = new Set<number>();
   const moves = placements(board, "Pair");
   const example = { column: 0, turns: 0 };
-  const before = rankMoves(moves, starter).find((move) => sameMove(move, example))!;
-  const weights = teach(moves, example, starter);
+  const trained = [8, 1] as const;
+  const before = rankMoves(moves, trained).find((move) => sameMove(move, example))!;
+  const weights = teach(moves, example, trained);
   const after = rankMoves(moves, weights);
   assert.ok(after.find((move) => sameMove(move, example))!.preference > before.preference);
 

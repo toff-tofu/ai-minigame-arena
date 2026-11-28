@@ -1,4 +1,3 @@
-import { tryLesson, type LessonPosition } from "../game/lesson-trial.ts";
 import type { Replay } from "../game/replays.ts";
 import { rankGameMoves, searchGame, teachGame } from "../ai/game-policy.ts";
 import { games, isGameId, type GameId, type Position } from "../game/catalog.ts";
@@ -36,6 +35,9 @@ type Turn = {
 let frames: Frame[] = [{ duel: startDuel(seedInput.valueAsNumber) }];
 let cursor = 0;
 let practiceSeed = seedInput.valueAsNumber;
+let sparring = false;
+let lessonCount = 0;
+let humanPosition: Position | undefined;
 let archivedSeat: 0 | 1 | undefined;
 const currentSeat = () => online?.seat ?? archivedSeat ?? 0;
 let turn: Turn | undefined;
@@ -58,6 +60,11 @@ const columnInput = element<HTMLInputElement>("coach-column");
 const rotationInput = element<HTMLSelectElement>("coach-rotation");
 const coachLast = element<HTMLButtonElement>("coach-last");
 const teachButton = element<HTMLButtonElement>("teach");
+const humanPanel = element("human-turn");
+const humanFeedback = element("human-feedback");
+const humanColumn = element<HTMLInputElement>("human-column");
+const humanRotation = element<HTMLSelectElement>("human-rotation");
+const humanChoice = element<HTMLSelectElement>("human-choice");
 const feedback = element("coach-feedback");
 let teachingFrame: Frame | undefined;
 
@@ -205,7 +212,6 @@ function renderCoaching(state: ReturnType<typeof coachingState>) {
   if (teachingFrame !== state?.next) {
     teachingFrame = state?.next;
     feedback.textContent = "";
-    clearLesson();
   }
   const result = state && drop(state.board, state.piece, state.move.column, state.move.turns);
   teachButton.disabled = result?.kind !== "placed";
@@ -247,7 +253,6 @@ function renderCatalogCoaching(match: CatalogMatch) {
   if (coachedPosition !== state?.position) {
     coachedPosition = state?.position;
     feedback.textContent = "";
-    clearLesson();
     const legal = state ? games[match.id].legal(state.position) : [];
     coachMove.replaceChildren(...legal.map((move) => new Option(moveLabel(match.id, move), String(move))));
     const otherMove = legal.find((move) => move !== state?.previous);
@@ -267,7 +272,8 @@ function renderCatalog(match: CatalogMatch) {
   const position = match.positions[cursor];
   const last = match.moves.length;
   const live = cursor === last;
-  const labels = online || archivedSeat !== undefined ? ["Player 1", "Player 2"] : ["Your bot", "Practice bot"];
+  const labels = sparring ? ["Your bot", "You"] :
+    online || archivedSeat !== undefined ? ["Player 1", "Player 2"] : ["Your bot", "Practice bot"];
   if (online || archivedSeat !== undefined) labels[currentSeat()] += " · Your bot";
   element("catalog-title").textContent = rules.title;
   element("catalog-rules").textContent = rules.instructions;
@@ -277,9 +283,18 @@ function renderCatalog(match: CatalogMatch) {
   const preview = (move: number) => rules.preview?.(move) ?? { cell: move, label: `Testing tile ${move + 1}` };
   const lastMove = match.moves[cursor - 1];
   const lesson = renderCatalogCoaching(match);
+  const human = sparring && live && position.active === 1 && position.outcome === "playing";
+  humanPanel.hidden = !human;
+  if (human && humanPosition !== position) {
+    humanPosition = position;
+    humanChoice.replaceChildren(...rules.legal(position).map((move) =>
+      new Option(moveLabel(match.id, move), String(move))));
+  }
+  const proposal = human && humanChoice.value ? rules.apply(position, Number(humanChoice.value)) : undefined;
+  if (human) humanFeedback.textContent = proposal ? "The board previews your selected move." : "";
   grid.replaceChildren(...position.cells.map((value, i) => {
     const cell = document.createElement("span");
-    const proposed = lesson?.cells[i];
+    const proposed = (proposal ?? lesson)?.cells[i];
     cell.textContent = rules.label(proposed ?? value);
     if (proposed !== undefined && proposed !== value) cell.dataset.lesson = "";
     if (candidate !== undefined && i === preview(candidate).cell) cell.dataset.candidate = "";
@@ -290,11 +305,12 @@ function renderCatalog(match: CatalogMatch) {
   const message = online?.phase === "waiting" ? "Waiting for a second bot."
     : position.outcome === "draw" ? "Draw."
     : position.outcome !== "playing" ? `${labels[position.outcome]} wins.`
+    : human ? "Your turn."
     : live ? `${labels[position.active]} to move.` : `Reviewing turn ${cursor}.`;
   if (status.textContent !== message) status.textContent = message;
   play.textContent = mode === "paused" ? "Play" : "Pause";
-  play.disabled = Boolean(online) || (live && position.outcome !== "playing");
-  step.disabled = online ? live : mode !== "paused" || (live && position.outcome !== "playing");
+  play.disabled = Boolean(online) || human || (live && position.outcome !== "playing");
+  step.disabled = online ? live : human || mode !== "paused" || (live && position.outcome !== "playing");
   back.disabled = cursor === 0;
   timeline.disabled = last === 0;
   timeline.max = String(last);
@@ -310,9 +326,9 @@ function advanceCatalog(match: CatalogMatch) {
     if (mode === "step") mode = "paused";
   } else {
     const position = match.positions[cursor];
-    if (position.outcome !== "playing") mode = "paused";
+    if (position.outcome !== "playing" || (sparring && position.active === 1)) mode = "paused";
     else {
-      match.search ??= searchGame(match.id, position, position.active === 0 ? matchWeights : [2, 7]);
+      match.search ??= searchGame(match.id, position, position.active === 0 ? matchWeights : [2, 7], practiceSeed, cursor);
       const next = match.search.next();
       if (next.done) {
         appendCatalogMove(match, next.value);
@@ -320,7 +336,10 @@ function advanceCatalog(match: CatalogMatch) {
         match.search = undefined;
         match.candidate = undefined;
         delay = 430;
-        if (mode === "step" || match.positions[cursor].outcome !== "playing") mode = "paused";
+        const nextPosition = match.positions[cursor];
+        if (mode === "step" || nextPosition.outcome !== "playing" || (sparring && nextPosition.active === 1)) {
+          mode = "paused";
+        }
       } else {
         match.candidate = next.value;
       }
@@ -332,6 +351,9 @@ function advanceCatalog(match: CatalogMatch) {
 
 function render() {
   maybeSaveReplay();
+  element("human-choice-label").hidden = !catalog;
+  element("human-column-label").hidden = Boolean(catalog);
+  element("human-rotation-label").hidden = Boolean(catalog);
   element("catalog-choice").hidden = !catalog;
   columnInput.closest("label")!.hidden = Boolean(catalog);
   rotationInput.closest("label")!.hidden = Boolean(catalog);
@@ -343,7 +365,17 @@ function render() {
   const live = cursor === frames.length - 1;
   const coaching = coachingState();
   const preview = renderCoaching(coaching);
-  const labels = online || archivedSeat !== undefined ? ["Player 1", "Player 2"] : names;
+  const labels = sparring ? ["Your bot", "You"] :
+    online || archivedSeat !== undefined ? ["Player 1", "Player 2"] : names;
+  const human = sparring && live && frame.duel.active === 1 && frame.duel.outcome === "playing";
+  humanPanel.hidden = !human;
+  const humanMove = stackingHumanMove();
+  const humanPiece = human ? frame.duel.pieces[frame.duel.players[1].turns] : undefined;
+  const humanPreview = humanPiece && drop(frame.duel.players[1].board, humanPiece, humanMove.column, humanMove.turns);
+  if (humanPiece && humanPreview) {
+    humanFeedback.textContent = humanPreview.kind === "placed"
+      ? `${humanPiece} preview · Height ${height(humanPreview.board)}` : humanPreview.reason;
+  }
   const remotePose = live ? online?.pose : undefined;
   for (const [i, ctx] of contexts.entries()) {
     ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
@@ -357,6 +389,11 @@ function render() {
     }
     if (coaching?.seat === i && preview?.kind === "placed") {
       for (const cell of preview.board) {
+        if (!player.board.has(cell)) drawCell(ctx, cell % WIDTH, Math.floor(cell / WIDTH), "#a9f1ad");
+      }
+    }
+    if (i === 1 && humanPreview && humanPreview.kind === "placed") {
+      for (const cell of humanPreview.board) {
         if (!player.board.has(cell)) drawCell(ctx, cell % WIDTH, Math.floor(cell / WIDTH), "#a9f1ad");
       }
     }
@@ -381,14 +418,15 @@ function render() {
   const message = online?.phase === "waiting" ? "Waiting for a second bot."
     : remotePose ? `${labels[active]} is ${remotePose.dropping ? "dropping" : "testing placements for"} its ${remotePose.piece}.`
     : finished
-    ? outcome === "draw" ? "Draw." : `${labels[outcome]} wins.`
+    ? outcome === "draw" ? "Draw." : sparring && outcome === 1 ? "You win." : `${labels[outcome]} wins.`
+    : human ? "Your turn."
     : !live ? `Turn ${cursor}. Reviewing a completed position.`
     : moving ? `${labels[active]} is ${moving.selected ? "dropping" : "testing placements for"} its ${moving.piece}.`
     : `${labels[active]} to move.`;
   if (status.textContent !== message) status.textContent = message;
   play.textContent = mode === "paused" ? "Play" : "Pause";
-  play.disabled = Boolean(online) || finished;
-  step.disabled = online ? live : finished || mode !== "paused";
+  play.disabled = Boolean(online) || human || finished;
+  step.disabled = online ? live : human || finished || mode !== "paused";
   back.disabled = cursor === 0;
   timeline.max = String(frames.length - 1);
   timeline.value = String(cursor);
@@ -407,12 +445,13 @@ function advance() {
     if (mode === "step") mode = "paused";
   } else {
     const duel = frames[cursor].duel;
-    if (duel.outcome === "playing") {
+    if (sparring && duel.active === 1) mode = "paused";
+    else if (duel.outcome === "playing") {
       if (!turn) {
         const player = duel.active;
         const { board, turns } = duel.players[player];
         const piece = duel.pieces[turns];
-        turn = { player, piece, search: searchMoves(board, piece, player === 0 ? matchWeights : "stability") };
+        turn = { player, piece, search: searchMoves(board, piece, player === 0 ? matchWeights : "stability", practiceSeed, cursor) };
       }
 
       if (!turn.selected) {
@@ -437,7 +476,7 @@ function advance() {
     }
   }
 
-  if (frames[cursor].duel.outcome !== "playing") mode = "paused";
+  if (frames[cursor].duel.outcome !== "playing" || (sparring && cursor === frames.length - 1 && frames[cursor].duel.active === 1)) mode = "paused";
   render();
   if (mode !== "paused") timer = window.setTimeout(advance, delay);
 }
@@ -482,7 +521,8 @@ element<HTMLFormElement>("match").onsubmit = (event) => {
   online?.stream.close();
   online = undefined;
   resetReplaySave();
-  battleNote.textContent = "";
+  sparring = (event.submitter as HTMLButtonElement | null)?.value === "play";
+  battleNote.textContent = sparring ? "Your bot learns from the moves you play." : "";
   pause();
   turn = undefined;
   cursor = 0;
@@ -490,8 +530,57 @@ element<HTMLFormElement>("match").onsubmit = (event) => {
   practiceSeed = seedInput.valueAsNumber;
   frames = [{ duel: startDuel(practiceSeed) }];
   catalog = isGameId(gameSelect.value) ? startCatalog(gameSelect.value, practiceSeed) : undefined;
-  render();
+  if (sparring) {
+    mode = "play";
+    advance();
+  } else render();
 };
+function stackingHumanMove(): Move {
+  return { column: humanColumn.valueAsNumber - 1, turns: Number(humanRotation.value) };
+}
+
+function learnFromPlay(updated: Weights) {
+  if (updated === weights) return;
+  saveLearnedWeights(updated);
+  matchWeights = updated;
+  lessonCount++;
+  battleNote.textContent = `Bot updated from ${lessonCount} of your moves this match.`;
+}
+
+humanColumn.oninput = render;
+humanRotation.onchange = render;
+humanChoice.onchange = render;
+element<HTMLFormElement>("human-move").onsubmit = (event) => {
+  event.preventDefault();
+  if (!sparring || humanPanel.hidden) return;
+  if (catalog) {
+    const position = catalog.positions[cursor];
+    const move = Number(humanChoice.value);
+    if (!games[catalog.id].legal(position).includes(move)) return;
+    learnFromPlay(teachGame(catalog.id, position, move, weights));
+    appendCatalogMove(catalog, move);
+  } else {
+    const { duel } = frames[cursor];
+    const { board, turns } = duel.players[1];
+    const piece = duel.pieces[turns];
+    const move = stackingHumanMove();
+    const result = drop(board, piece, move.column, move.turns);
+    if (result.kind === "invalid") return;
+    if (result.kind === "placed") learnFromPlay(teach(placements(board, piece), move, weights));
+    appendMove(move, 1);
+  }
+  cursor++;
+  pause();
+  mode = "play";
+  advance();
+};
+
+element("reset-training").onclick = () => {
+  if (!window.confirm("Reset this browser’s bot training to zero? Your account save can still be loaded.")) return;
+  const persistence = saveLearnedWeights(starter);
+  feedback.textContent = `Bot reset to zero. Start a new match to use it. ${persistence}`;
+};
+
 coachLast.onclick = () => {
   const seat = currentSeat();
   if (catalog) {
@@ -522,58 +611,11 @@ coachLast.onclick = () => {
 
 function previewChange() {
   feedback.textContent = "";
-  clearLesson();
   render();
 }
 columnInput.oninput = previewChange;
 rotationInput.onchange = previewChange;
 coachMove.onchange = previewChange;
-
-type LessonTrial = { position: LessonPosition; before: Weights; after: Weights; seat: 0 | 1 };
-let latestLesson: LessonTrial | undefined;
-const testLesson = element<HTMLButtonElement>("test-lesson");
-const trialPanel = element("lesson-trial");
-
-function clearLesson() {
-  latestLesson = undefined;
-  testLesson.hidden = true;
-  trialPanel.hidden = true;
-}
-
-function offerLessonTest(position: LessonPosition, after: Weights) {
-  latestLesson = { position, before: weights, after, seat: currentSeat() };
-  trialPanel.hidden = true;
-  testLesson.hidden = false;
-}
-
-testLesson.onclick = () => {
-  if (!latestLesson) return;
-  const { position, before, after, seat } = latestLesson;
-  const trials = [tryLesson(position, seat, before), tryLesson(position, seat, after)];
-  const unchanged = trials[0].moves.every((move, index) => move === trials[1].moves[index]) &&
-    trials[0].moves.length === trials[1].moves.length;
-  const panels = trials.map((trial, index) => {
-    const panel = document.createElement("article");
-    const title = document.createElement("h3");
-    title.textContent = index ? "After lesson" : "Before lesson";
-    const moves = document.createElement("ol");
-    for (const move of trial.moves) {
-      const item = document.createElement("li");
-      item.textContent = move;
-      moves.append(item);
-    }
-    const result = document.createElement("p");
-    const outcome = trial.outcome === "playing" ? "Match in progress"
-      : trial.outcome === "draw" ? "Draw" : trial.outcome === seat ? "Your bot wins" : "Practice bot wins";
-    result.textContent = trial.scores ? `${outcome} · Heights ${trial.scores.join("–")}` : outcome;
-    panel.append(title, moves, result);
-    return panel;
-  });
-  element("trial-summary").textContent = unchanged ? "Both versions chose the same moves in this trial."
-    : "The lesson changed at least one move in this trial.";
-  element("trial-results").replaceChildren(...panels);
-  trialPanel.hidden = false;
-};
 
 function saveLearnedWeights(updated: Weights) {
   weights = updated;
@@ -599,11 +641,10 @@ function teachCatalog(match: CatalogMatch) {
   }
   const after = rankGameMoves(match.id, state.position, updated);
   const taught = after.find((option) => option.move === move)!;
-  offerLessonTest({ game: match.id, state: state.position }, updated);
   const persistence = saveLearnedWeights(updated);
   feedback.textContent = `Your move ranked ${target.rank} → ${taught.rank} of ${before.length}. ` +
     `Its preference rose from ${(100 * target.preference).toPrecision(3)}% to ${(100 * taught.preference).toPrecision(3)}%. ` +
-    `The updated bot would choose ${moveLabel(match.id, after[0].move)}. ${persistence}`;
+    `Top-ranked move: ${moveLabel(match.id, after[0].move)}. ${persistence}`;
 }
 teachButton.onclick = () => {
   if (catalog) return teachCatalog(catalog);
@@ -623,12 +664,11 @@ teachButton.onclick = () => {
   const previous = state.next.move!;
   const oldRank = before.find((move) => sameMove(move, previous))?.rank;
   const newRank = after.find((move) => sameMove(move, previous))?.rank;
-  offerLessonTest({ game: "stacking", state: frames[cursor].duel }, updated);
   const persistence = saveLearnedWeights(updated);
   feedback.textContent = `Your move ranked ${target.rank} → ${taught.rank} of ${moves.length}. ` +
     `Its preference weight rose from ${(100 * target.preference).toPrecision(3)}% to ${(100 * taught.preference).toPrecision(3)}%. ` +
     (oldRank && newRank ? `The bot’s original move ranked ${oldRank} → ${newRank}. ` : "") +
-    `The updated bot would choose column ${after[0].column + 1}, ${after[0].turns * 90}°. ${persistence}`;
+    `Top-ranked move: column ${after[0].column + 1}, ${after[0].turns * 90}°. ${persistence}`;
 };
 const recoveryCode = element<HTMLInputElement>("recovery-code");
 const saveBot = element<HTMLButtonElement>("save-bot");
@@ -683,7 +723,6 @@ element<HTMLFormElement>("load-bot").onsubmit = (event) => {
     }
     recoveryCode.value = "";
     feedback.textContent = "";
-    clearLesson();
   });
 };
 
@@ -715,7 +754,10 @@ let saveAttempted = false;
 let replayGeneration = 0;
 
 function resetReplaySave() {
-  clearLesson();
+  sparring = false;
+  lessonCount = 0;
+  humanPosition = undefined;
+  humanFeedback.textContent = "";
   saveAttempted = false;
   replayGeneration++;
   archivedSeat = undefined;
@@ -725,7 +767,7 @@ function resetReplaySave() {
 function completedReplay(): Replay | undefined {
   const outcome = catalog ? catalog.positions.at(-1)!.outcome : frames.at(-1)!.duel.outcome;
   if (outcome === "playing") return;
-  const metadata = { id: crypto.randomUUID(), seed: practiceSeed, seat: 0 as const, mode: "practice" as const };
+  const metadata = { id: crypto.randomUUID(), seed: practiceSeed, seat: 0 as const, mode: sparring ? "training" as const : "practice" as const };
   if (catalog) {
     return { ...metadata, game: catalog.id, moves: [...catalog.moves] };
   }
@@ -803,7 +845,7 @@ async function showHistory(reset: boolean) {
       const title = replay.game === "stacking" ? "Block Stacking" : games[replay.game].title;
       const result = outcome === "draw" ? "Draw" : outcome === replay.seat ? "Win" : "Loss";
       const date = new Date(item.saved_at).toLocaleDateString();
-      button.textContent = `${title} · ${result} · ${replay.mode === "online" ? "Online" : "Practice"} · ${date}`;
+      button.textContent = `${title} · ${result} · ${replay.mode === "online" ? "Online" : replay.mode === "training" ? "Vs your bot" : "Practice"} · ${date}`;
       button.onclick = () => openReplay(replay);
       listItem.append(button);
       historyList.append(listItem);
@@ -868,6 +910,6 @@ element("sign-out").onclick = accountAction(async () => {
 });
 void loadAccount(false).catch(() => {});
 gameSelect.onchange = () => {
-  if (!online && !requestPending) element<HTMLFormElement>("match").requestSubmit();
+  if (!online && !sparring && !requestPending) element<HTMLFormElement>("match").requestSubmit();
 };
 render();

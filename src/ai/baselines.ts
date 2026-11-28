@@ -1,15 +1,24 @@
-import { features, score, type Weights } from "./coaching.ts";
-import { drop, height, WIDTH, type Board, type Piece } from "../game/stacking.ts";
+import { exploration, features, score, type Weights } from "./coaching.ts";
+import { drop, height, orientation, WIDTH, type Board, type Piece } from "../game/stacking.ts";
 
 export const strategies = ["height", "stability"] as const;
 export type Strategy = (typeof strategies)[number];
 export type Move = { column: number; turns: number };
 
-export function* searchMoves(board: Board, piece: Piece, strategy: Strategy | Weights): Generator<Move, Move> {
+export function* searchMoves(board: Board, piece: Piece, strategy: Strategy | Weights, seed = 0, turn = 0): Generator<Move, Move> {
   let best: { move: Move; primary: number; secondary: number } | undefined;
+  const sample = typeof strategy === "string" ? undefined : exploration(strategy, seed, turn);
+  const choices: Move[] = [];
   for (let column = 0; column < WIDTH; column++) {
     for (let turns = 0; turns < 4; turns++) {
       const move = { column, turns };
+      if (sample !== undefined) {
+        if (orientation(piece, turns).every(([x]) => column + x < WIDTH)) {
+          choices.push(move);
+          yield move;
+        }
+        continue;
+      }
       const result = drop(board, piece, column, turns);
       if (result.kind !== "invalid") yield move;
       if (result.kind !== "placed") continue;
@@ -25,6 +34,7 @@ export function* searchMoves(board: Board, piece: Piece, strategy: Strategy | We
   }
 
   // Every piece fits at column zero. If no move survives, let the duel record the bust.
+  if (sample !== undefined) return choices[Math.floor(sample * choices.length)];
   return best?.move ?? { column: 0, turns: 0 };
 }
 

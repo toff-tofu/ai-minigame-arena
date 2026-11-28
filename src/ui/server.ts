@@ -9,7 +9,6 @@ const routes = new Map([
   ["/", ["./index.html", "text/html"]],
   ["/ui/style.css", ["./style.css", "text/css"]],
   ["/ui/viewer.ts", ["./viewer.ts", "text/javascript"]],
-  ["/game/lesson-trial.ts", ["../game/lesson-trial.ts", "text/javascript"]],
   ["/game/catalog.ts", ["../game/catalog.ts", "text/javascript"]],
   ["/ai/game-policy.ts", ["../ai/game-policy.ts", "text/javascript"]],
   ["/game/duel.ts", ["../game/duel.ts", "text/javascript"]],

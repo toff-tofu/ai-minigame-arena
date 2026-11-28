@@ -42,9 +42,11 @@ On Railway, add a PostgreSQL service to the existing project. In the Node servic
 
 ## Games and matchmaking
 
-Pick **Block Stacking**, **Tic-tac-toe**, **Four in a Row**, **Takeaway**, **Three Heaps**, or **Number Draft**. Use **Practice match** to watch the local bots. **Find opponent** pairs you with another waiting player who chose the same game. Cancel whenever you like, or use **Invite a friend** and send them the code. A friend’s code opens the game chosen by the host.
+Pick **Block Stacking**, **Tic-tac-toe**, **Four in a Row**, **Takeaway**, **Three Heaps**, or **Number Draft**. Use **Watch practice** to watch the local bots or **Play vs your bot** to take your own turns. **Find opponent** pairs you with another waiting player who chose the same game. Cancel whenever you like, or use **Invite a friend** and send them the code. A friend’s code opens the game chosen by the host.
 
-Every game supplies its rules, legal moves, and a position evaluation. The five catalog games share one search policy, which considers each move and the opponent’s replies in turn. The same two trained weights also drive the stacking policy. Demonstration coaching is available for every game. Click **Coach my last move** and preview a legal alternative, then click **Teach move**. Training changes the shared weights for your next match. Click **Test lesson** after teaching to compare up to six turns from the same position using the old and new weights against a fixed practice opponent.
+Every game supplies its rules, legal moves, and a position evaluation. The five catalog games share one search policy, which considers each move and the opponent’s replies in turn. The same two trained weights also drive the stacking policy. Demonstration coaching is available for every game. Click **Coach my last move** and preview a legal alternative, then click **Teach move**. Training changes the shared weights for your next match. In **Play vs your bot**, your moves double as demonstrations. Useful examples update the bot immediately, and it uses the updated weights on its next turn. In Block Stacking, only successful placements train it.
+
+Fresh bots begin with two zero weights and choose among legal moves at random. When they learn, they increasingly use the move scorer. Existing saved weights carry forward. **Reset this browser’s bot** starts the local training over. To carry new training across devices, save it to your account.
 
 ## Enable Google sign-in
 

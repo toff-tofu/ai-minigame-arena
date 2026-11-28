@@ -14,7 +14,8 @@
       <form id="match">
         <label>Game <select id="game"><option value="stacking">Block Stacking</option></select></label>
         <label>Seed <input id="seed" type="number" min="0" max="4294967295" value="42" required></label>
-        <button>Practice match</button>
+        <button type="submit" name="mode" value="watch">Watch practice</button>
+        <button type="submit" name="mode" value="play" class="primary">Play vs your bot</button>
       </form>
     </header>
     <div class="arena-layout">
@@ -46,13 +47,19 @@
       </div>
       <p id="coach-preview"></p>
       <p id="coach-feedback" role="status"></p>
-      <button id="test-lesson" type="button" hidden>Test lesson</button>
-      <section id="lesson-trial" aria-labelledby="trial-title" hidden>
-        <h2 id="trial-title">Lesson comparison</h2>
-        <p>Both versions start here and face the same practice opponent for up to six turns.</p>
-        <div id="trial-results"></div>
-        <p id="trial-summary" role="status"></p>
-      </section>
+      <button id="reset-training" type="button">Reset this browser’s bot</button>
+    </section>
+    <section id="human-turn" aria-labelledby="human-title" hidden>
+      <h2 id="human-title">Your move</h2>
+      <form id="human-move">
+        <label id="human-column-label">Column <input id="human-column" type="number" min="1" max="9" value="1" required></label>
+        <label id="human-rotation-label">Rotation <select id="human-rotation">
+          <option value="0">0°</option><option value="1">90°</option><option value="2">180°</option><option value="3">270°</option>
+        </select></label>
+        <label id="human-choice-label" hidden>Move <select id="human-choice"></select></label>
+        <button type="submit" class="primary">Play move</button>
+      </form>
+      <p id="human-feedback" role="status"></p>
     </section>
     <section id="account" aria-labelledby="account-title" hidden>
       <h2 id="account-title">Your account</h2>

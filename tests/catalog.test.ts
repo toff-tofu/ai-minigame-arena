@@ -29,3 +29,19 @@ test("catalog coaching increases preference without teaching illegal moves", asy
   assert.ok(after.find(({ move }) => move === example.move)!.preference > example.preference);
   assert.equal(teachGame("tictactoe", position, 100, starter), starter);
 });
+
+test("fresh bots sometimes miss a direct win and only pick legal moves", () => {
+  assert.deepEqual(starter, [0, 0]);
+  const rules = games.tictactoe;
+  const position = [0, 3, 1, 4].reduce((state, move) => rules.apply(state, move), rules.start(42));
+  const choices = new Set<number>();
+  for (let seed = 0; seed < 24; seed++) {
+    const search = searchGame("tictactoe", position, starter, seed);
+    let step = search.next();
+    while (!step.done) step = search.next();
+    assert.ok(rules.legal(position).includes(step.value));
+    choices.add(step.value);
+  }
+  assert.ok(choices.has(2));
+  assert.ok(choices.size > 1);
+});
